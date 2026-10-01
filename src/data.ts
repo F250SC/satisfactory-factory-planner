@@ -1,144 +1,45 @@
+import gameData from './gameData.json'
+
 export type Purity = 'impure' | 'normal' | 'pure'
 export type MinerTier = 'mk1' | 'mk2' | 'mk3'
 export type BeltTier = 'mk1' | 'mk2' | 'mk3' | 'mk4' | 'mk5' | 'mk6'
+export type PipeTier = 'mk1' | 'mk2'
+export type ResourceKind = 'solid' | 'oil' | 'water' | 'nitrogen'
 
-export type ItemId =
-  | 'iron-ore'
-  | 'coal'
-  | 'iron-ingot'
-  | 'iron-plate'
-  | 'iron-rod'
-  | 'screw'
-  | 'reinforced-iron-plate'
-  | 'rotor'
-  | 'modular-frame'
-  | 'steel-ingot'
-  | 'steel-beam'
-  | 'steel-pipe'
-
-export type MachineId = 'smelter' | 'constructor' | 'assembler' | 'foundry'
-
-export interface Recipe {
-  id: string
-  output: ItemId
-  outputRate: number
-  machine: MachineId
-  inputs: Array<{ item: ItemId; rate: number }>
+export interface GameItem {
+  name: string
+  liquid: boolean
+  icon?: string
 }
 
-export const rawResources: ItemId[] = ['iron-ore', 'coal']
-
-export const itemNames: Record<ItemId, { de: string; en: string }> = {
-  'iron-ore': { de: 'Eisenerz', en: 'Iron Ore' },
-  coal: { de: 'Kohle', en: 'Coal' },
-  'iron-ingot': { de: 'Eisenbarren', en: 'Iron Ingot' },
-  'iron-plate': { de: 'Eisenplatte', en: 'Iron Plate' },
-  'iron-rod': { de: 'Eisenstange', en: 'Iron Rod' },
-  screw: { de: 'Schrauben', en: 'Screws' },
-  'reinforced-iron-plate': { de: 'Verstärkte Eisenplatte', en: 'Reinforced Iron Plate' },
-  rotor: { de: 'Rotor', en: 'Rotor' },
-  'modular-frame': { de: 'Modularer Rahmen', en: 'Modular Frame' },
-  'steel-ingot': { de: 'Stahlbarren', en: 'Steel Ingot' },
-  'steel-beam': { de: 'Stahlträger', en: 'Steel Beam' },
-  'steel-pipe': { de: 'Stahlrohr', en: 'Steel Pipe' },
+export interface GameRecipePart {
+  item: string
+  amount: number
 }
 
-export const targetItems: ItemId[] = [
-  'iron-plate',
-  'iron-rod',
-  'screw',
-  'reinforced-iron-plate',
-  'rotor',
-  'modular-frame',
-  'steel-ingot',
-  'steel-beam',
-  'steel-pipe',
-]
+export interface GameRecipe {
+  className: string
+  name: string
+  alternate: boolean
+  time: number
+  ingredients: GameRecipePart[]
+  products: GameRecipePart[]
+  producedIn: string
+  variablePower: boolean
+  minPower: number
+  maxPower: number
+}
 
-export const recipes: Recipe[] = [
-  {
-    id: 'iron-ingot',
-    output: 'iron-ingot',
-    outputRate: 30,
-    machine: 'smelter',
-    inputs: [{ item: 'iron-ore', rate: 30 }],
-  },
-  {
-    id: 'iron-plate',
-    output: 'iron-plate',
-    outputRate: 20,
-    machine: 'constructor',
-    inputs: [{ item: 'iron-ingot', rate: 30 }],
-  },
-  {
-    id: 'iron-rod',
-    output: 'iron-rod',
-    outputRate: 15,
-    machine: 'constructor',
-    inputs: [{ item: 'iron-ingot', rate: 15 }],
-  },
-  {
-    id: 'screw',
-    output: 'screw',
-    outputRate: 40,
-    machine: 'constructor',
-    inputs: [{ item: 'iron-rod', rate: 10 }],
-  },
-  {
-    id: 'reinforced-iron-plate',
-    output: 'reinforced-iron-plate',
-    outputRate: 5,
-    machine: 'assembler',
-    inputs: [
-      { item: 'iron-plate', rate: 30 },
-      { item: 'screw', rate: 60 },
-    ],
-  },
-  {
-    id: 'rotor',
-    output: 'rotor',
-    outputRate: 4,
-    machine: 'assembler',
-    inputs: [
-      { item: 'iron-rod', rate: 20 },
-      { item: 'screw', rate: 100 },
-    ],
-  },
-  {
-    id: 'modular-frame',
-    output: 'modular-frame',
-    outputRate: 2,
-    machine: 'assembler',
-    inputs: [
-      { item: 'reinforced-iron-plate', rate: 3 },
-      { item: 'iron-rod', rate: 12 },
-    ],
-  },
-  {
-    id: 'steel-ingot',
-    output: 'steel-ingot',
-    outputRate: 45,
-    machine: 'foundry',
-    inputs: [
-      { item: 'iron-ore', rate: 45 },
-      { item: 'coal', rate: 45 },
-    ],
-  },
-  {
-    id: 'steel-beam',
-    output: 'steel-beam',
-    outputRate: 15,
-    machine: 'constructor',
-    inputs: [{ item: 'steel-ingot', rate: 60 }],
-  },
-  {
-    id: 'steel-pipe',
-    output: 'steel-pipe',
-    outputRate: 20,
-    machine: 'constructor',
-    inputs: [{ item: 'steel-ingot', rate: 30 }],
-  },
-]
+export interface GameBuilding {
+  name: string
+  power: number
+}
+
+export const items = gameData.items as Record<string, GameItem>
+export const recipes = gameData.recipes as GameRecipe[]
+export const buildings = gameData.buildings as Record<string, GameBuilding>
+export const rawResources = gameData.resources as string[]
+export const dataMetadata = gameData.metadata
 
 export const purityMultiplier: Record<Purity, number> = {
   impure: 0.5,
@@ -161,16 +62,73 @@ export const beltRates: Record<BeltTier, number> = {
   mk6: 1200,
 }
 
-export const machineNames: Record<MachineId, { de: string; en: string }> = {
-  smelter: { de: 'Schmelzofen', en: 'Smelter' },
-  constructor: { de: 'Konstruktor', en: 'Constructor' },
-  assembler: { de: 'Assembler', en: 'Assembler' },
-  foundry: { de: 'Gießerei', en: 'Foundry' },
+export const pipeRates: Record<PipeTier, number> = {
+  mk1: 300,
+  mk2: 600,
 }
 
-export const machinePowerMW: Record<MachineId, number> = {
-  smelter: 4,
-  constructor: 4,
-  assembler: 15,
-  foundry: 16,
+export const resourceMeta: Record<string, {
+  de: string
+  en: string
+  kind: ResourceKind
+}> = {
+  Desc_OreIron_C: { de: 'Eisenerz', en: 'Iron Ore', kind: 'solid' },
+  Desc_Coal_C: { de: 'Kohle', en: 'Coal', kind: 'solid' },
+  Desc_Water_C: { de: 'Wasser', en: 'Water', kind: 'water' },
+  Desc_NitrogenGas_C: { de: 'Stickstoffgas', en: 'Nitrogen Gas', kind: 'nitrogen' },
+  Desc_Sulfur_C: { de: 'Schwefel', en: 'Sulfur', kind: 'solid' },
+  Desc_SAM_C: { de: 'SAM', en: 'SAM', kind: 'solid' },
+  Desc_OreBauxite_C: { de: 'Bauxit', en: 'Bauxite', kind: 'solid' },
+  Desc_OreGold_C: { de: 'Cateriumerz', en: 'Caterium Ore', kind: 'solid' },
+  Desc_OreCopper_C: { de: 'Kupfererz', en: 'Copper Ore', kind: 'solid' },
+  Desc_RawQuartz_C: { de: 'Rohquarz', en: 'Raw Quartz', kind: 'solid' },
+  Desc_Stone_C: { de: 'Kalkstein', en: 'Limestone', kind: 'solid' },
+  Desc_OreUranium_C: { de: 'Uranerz', en: 'Uranium', kind: 'solid' },
+  Desc_LiquidOil_C: { de: 'Rohöl', en: 'Crude Oil', kind: 'oil' },
+}
+
+export const machineGermanNames: Record<string, string> = {
+  Desc_ConstructorMk1_C: 'Konstruktor',
+  Desc_SmelterMk1_C: 'Schmelzofen',
+  Desc_Blender_C: 'Blender',
+  Desc_Packager_C: 'Verpacker',
+  Desc_Converter_C: 'Konverter',
+  Desc_HadronCollider_C: 'Partikelbeschleuniger',
+  Desc_QuantumEncoder_C: 'Quanten-Encoder',
+  Desc_OilRefinery_C: 'Raffinerie',
+  Desc_ManufacturerMk1_C: 'Fabrikator',
+  Desc_AssemblerMk1_C: 'Assembler',
+  Desc_FoundryMk1_C: 'Gießerei',
+}
+
+export function itemName(id: string) {
+  return items[id]?.name ?? id.replace(/^Desc_/, '').replace(/_C$/, '')
+}
+
+export function recipesForProduct(itemId: string) {
+  return recipes.filter((recipe) => recipe.products.some((product) => product.item === itemId))
+}
+
+export function primaryProduct(recipe: GameRecipe, itemId: string) {
+  return recipe.products.find((product) => product.item === itemId)
+}
+
+export const targetItems = Array.from(
+  new Set(recipes.flatMap((recipe) => recipe.products.map((product) => product.item)))
+)
+  .filter((id) => items[id])
+  .sort((a, b) => itemName(a).localeCompare(itemName(b)))
+
+export function defaultRecipeFor(itemId: string) {
+  const candidates = recipesForProduct(itemId)
+  return (
+    candidates.find((recipe) =>
+      !recipe.alternate &&
+      recipe.products[0]?.item === itemId &&
+      !/^Unpackage /i.test(recipe.name)
+    ) ??
+    candidates.find((recipe) => !recipe.alternate && recipe.products[0]?.item === itemId) ??
+    candidates.find((recipe) => !recipe.alternate) ??
+    candidates[0]
+  )
 }
