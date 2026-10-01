@@ -491,8 +491,6 @@ export default function FactoryDesigner({
     ignoreId?: string,
   ) => {
     const rect = rectFor(candidate)
-    if (rect.left < 0 || rect.top < 0) return false
-
     const machineCollision = nodes.some((node) => {
       if (node.id === ignoreId) return false
       if ((node.floorId ?? normalized.floors[0].id) !== candidate.floorId) return false
@@ -513,8 +511,6 @@ export default function FactoryDesigner({
 
   const utilityFits = (candidate: DesignerUtility, ignoreId?: string) => {
     const rect = utilityRect(candidate)
-    if (rect.left < 0 || rect.top < 0) return false
-
     const utilityCollision = normalized.utilities.some((utility) => {
       if (utility.id === ignoreId || utility.floorId !== candidate.floorId) return false
       return overlaps(rect, utilityRect(utility))
@@ -670,8 +666,6 @@ export default function FactoryDesigner({
     const rect = sourceRect(candidate)
 
     const blocked =
-      rect.left < 0 ||
-      rect.top < 0 ||
       normalized.nodes.some((node) =>
         (node.floorId ?? normalized.floors[0].id) === activeFloor.id &&
         overlaps(rect, rectFor(node))
@@ -713,8 +707,8 @@ export default function FactoryDesigner({
     const lift = normalized.lifts.find((entry) => entry.id === id)
     if (!lift) return
 
-    const clampedX = Math.max(0, x)
-    const clampedY = Math.max(0, y)
+    const clampedX = x
+    const clampedY = y
 
     const occupied = normalized.lifts.some(
       (entry) =>
@@ -950,7 +944,6 @@ export default function FactoryDesigner({
 
     const nodeFitsLocal = (candidate: DesignerNode) => {
       const rect = rectFor(candidate)
-      if (rect.left < 0 || rect.top < 0) return false
       if (generatedNodes.some((node) => overlaps(rect, rectFor(node)))) return false
       return !generatedSources.some((source) => overlaps(rect, sourceRect(source)))
     }
@@ -1996,8 +1989,8 @@ export default function FactoryDesigner({
                 (e.clientX - rect.left - pan.x - payload.offsetX) / zoom
               const worldTopPx =
                 (e.clientY - rect.top - pan.y - payload.offsetY) / zoom
-              const x = Math.max(0, Math.round(worldLeftPx / CELL_PX))
-              const y = Math.max(0, Math.round(worldTopPx / CELL_PX))
+              const x = Math.round(worldLeftPx / CELL_PX)
+              const y = Math.round(worldTopPx / CELL_PX)
 
               if (payload.kind === 'node') moveNode(payload.id, x, y)
               else if (payload.kind === 'utility') moveUtility(payload.id, x, y)
