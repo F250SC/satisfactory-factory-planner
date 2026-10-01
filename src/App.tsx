@@ -68,7 +68,6 @@ import {
   type SavedProfile,
 } from './profiles'
 
-// v0.20.1: retrigger deployment after unified Factory Designer selection update
 
 type Lang = 'de' | 'en'
 
