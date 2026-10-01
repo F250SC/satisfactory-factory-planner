@@ -1,3 +1,4 @@
+import packageInfo from '../package.json'
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -27,6 +28,7 @@ import {
   extractorIconUrl,
   itemIconUrl,
   itemName,
+  items,
   machineGermanNames,
   machineIconUrl,
   pipeRates,
@@ -617,6 +619,18 @@ export default function App() {
   const hasTransportLimit = resourceRates.some(({ rate }) => rate.transportLimited)
   const hasSurplus = result.requiredResources.some((id) => (result.leftovers[id] ?? 0) > 0.01)
   const hasIntermediateSurplus = result.machineSteps.some((step) => step.surplusRate > 0.01)
+  const hasByproductRecipes = result.machineSteps.some(
+    (step) => step.recipe.products.length > 1,
+  )
+  const hasFluidMaterials =
+    result.requiredResources.some(
+      (id) => resourceMeta[id]?.kind && resourceMeta[id].kind !== 'solid',
+    ) ||
+    result.machineSteps.some((step) =>
+      [...step.recipe.ingredients, ...step.recipe.products].some(
+        (part) => Boolean(items[part.item]?.liquid),
+      ),
+    )
   const status = hasTransportLimit
     ? t.limited
     : result.practicalClockLimited
@@ -641,7 +655,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.22.1</div>
+          <div className="version">{`v${packageInfo.version}`}</div>
         </div>
       </header>
 
@@ -803,6 +817,16 @@ export default function App() {
               <span>{t.clockLimitedHint}</span>
             </div>
           )}
+          {hasByproductRecipes && (
+            <div className="audit-warning">
+              <AlertTriangle size={17} />
+              <span>
+                {lang === 'de'
+                  ? 'Diese Produktionskette enthält Nebenprodukte. Der aktuelle Solver schreibt Nebenprodukte korrekt den Maschinen zu, führt sie aber noch nicht automatisch in geschlossene Produktionskreisläufe zurück. Der externe Rohstoffbedarf kann bei solchen Rezepten daher konservativ ausfallen.'
+                  : 'This production chain contains by-products. The current solver assigns them to machines correctly, but does not yet automatically feed them back into closed production loops. External raw-resource demand can therefore be conservative for these recipes.'}
+              </span>
+            </div>
+          )}
 
           <div className="summary-strip">
             {resourceRates.map(({ id, rate }) => (
@@ -868,7 +892,18 @@ export default function App() {
           <button className="action-button primary" onClick={() => setActiveView('designer')}>Factory Designer öffnen</button>
         </section>
         </> : (
-          <FactoryDesigner
+          <>
+            {hasFluidMaterials && (
+              <div className="audit-warning designer-capability-warning">
+                <AlertTriangle size={17} />
+                <span>
+                  {lang === 'de'
+                    ? 'Hinweis: Diese Kette enthält Flüssigkeiten oder Gase. Der Produktionsplan rechnet sie, der Factory Designer stellt Transportverbindungen aktuell aber noch als allgemeine Linien dar. Echte Pipe-/Pipeline-Objekte sind noch nicht modelliert.'
+                    : 'Note: This chain contains fluids or gases. The production planner calculates them, but the Factory Designer currently renders transport connections as generic lines. Dedicated pipe/pipeline objects are not modeled yet.'}
+                </span>
+              </div>
+            )}
+            <FactoryDesigner
             lang={lang}
             steps={result.machineSteps}
             resources={result.requiredResources.map((id) => ({
@@ -883,6 +918,7 @@ export default function App() {
             layout={designerLayout}
             onChange={setDesignerLayout}
           />
+          </>
         )}
       </div>
     </main>
