@@ -94,7 +94,7 @@ export interface DesignerBelt {
   tier: BeltTier
   materialId?: string
   waypoints?: DesignerBeltWaypoint[]
-  routeStyle?: 'orthogonal' | 'smooth'
+  routeStyle?: 'straight' | 'orthogonal' | 'smooth'
 }
 
 export interface DesignerLayout {
@@ -365,9 +365,17 @@ function routedPath(
   from: PortPoint,
   to: PortPoint,
   waypoints: DesignerBeltWaypoint[] | undefined,
-  style: 'orthogonal' | 'smooth',
+  style: 'straight' | 'orthogonal' | 'smooth',
   laneOffset = 0,
 ) {
+  if (style === 'straight' && !waypoints?.length) {
+    return {
+      d: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
+      labelX: (from.x + to.x) / 2 + 5,
+      labelY: (from.y + to.y) / 2 - 5,
+    }
+  }
+
   if (waypoints?.length) {
     const points = [
       { x: from.x, y: from.y },
@@ -1714,6 +1722,39 @@ export default function FactoryDesigner({
       }
     }
 
+    // Give every automatically generated belt its own routing channel.
+    // This prevents identical belt segments from stacking directly on top of each other.
+    generatedBelts.forEach((belt, index) => {
+      const from = centerOfEndpoint(belt.from)
+      const to = centerOfEndpoint(belt.to)
+      const direction = to.x >= from.x ? 1 : -1
+      const baseMidX = (from.x + to.x) / 2
+      const lane = ((index % 9) - 4) * 0.22
+      const channelX = baseMidX + lane
+      const sourceStubX = from.x + direction * 0.7
+      const targetStubX = to.x - direction * 0.7
+
+      belt.routeStyle = 'orthogonal'
+      belt.waypoints = [
+        {
+          x: sourceStubX * FOUNDATION_METERS,
+          y: from.y * FOUNDATION_METERS,
+        },
+        {
+          x: channelX * FOUNDATION_METERS,
+          y: from.y * FOUNDATION_METERS,
+        },
+        {
+          x: channelX * FOUNDATION_METERS,
+          y: to.y * FOUNDATION_METERS,
+        },
+        {
+          x: targetStubX * FOUNDATION_METERS,
+          y: to.y * FOUNDATION_METERS,
+        },
+      ]
+    })
+
     writeLayout(
       [...keepNodes, ...generatedNodes],
       normalized.floors,
@@ -2931,6 +2972,12 @@ export default function FactoryDesigner({
                     {lang === 'de' ? 'Linienführung' : 'Routing'}
                   </span>
                   <div className="route-style-buttons">
+                    <button
+                      className={`action-button ${selectedBelt.routeStyle === 'straight' ? 'tool-active' : ''}`}
+                      onClick={() => updateBelt(selectedBelt.id, { routeStyle: 'straight' })}
+                    >
+                      {lang === 'de' ? 'Gerade' : 'Straight'}
+                    </button>
                     <button
                       className={`action-button ${(selectedBelt.routeStyle ?? 'orthogonal') === 'orthogonal' ? 'tool-active' : ''}`}
                       onClick={() => updateBelt(selectedBelt.id, { routeStyle: 'orthogonal' })}
