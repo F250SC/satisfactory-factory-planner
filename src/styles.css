@@ -1165,3 +1165,17 @@ select:focus, input:focus { border-color: #f28c28; }
 .belt-arrow-head.overloaded {
   fill: #d85b45;
 }
+
+
+/* v0.14.1 movable conveyor lifts */
+.factory-lift {
+  padding: 0;
+  cursor: grab;
+}
+.factory-lift:active {
+  cursor: grabbing;
+}
+.factory-lift.selected {
+  border-color: #f28c28;
+  box-shadow: 0 0 0 3px rgba(242,140,40,.22);
+}
