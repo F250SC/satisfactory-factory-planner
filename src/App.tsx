@@ -21,6 +21,7 @@ import {
   buildings,
   dataMetadata,
   defaultRecipeFor,
+  extractorIconUrl,
   itemIconUrl,
   itemName,
   machineGermanNames,
@@ -279,6 +280,29 @@ function ResourceCard({
             </label>
           )}
 
+          <div className="extractor-visual">
+            {extractorIconUrl(meta.kind, config.miner) && (
+              <img
+                src={extractorIconUrl(meta.kind, config.miner) ?? ''}
+                alt={meta.kind === 'solid' ? `Miner ${config.miner.toUpperCase()}` : displayResourceName(resourceId, lang)}
+                loading="lazy"
+                onError={(event) => { event.currentTarget.style.display = 'none' }}
+              />
+            )}
+            <div>
+              <span>{meta.kind === 'solid' ? t.miner : t.resources}</span>
+              <strong>
+                {meta.kind === 'solid'
+                  ? `Miner Mk.${config.miner.slice(2)}`
+                  : meta.kind === 'oil'
+                    ? 'Oil Extractor'
+                    : meta.kind === 'water'
+                      ? 'Water Extractor'
+                      : 'Resource Well Extractor'}
+              </strong>
+            </div>
+          </div>
+
           <div className="clock-box">
             <div className="clock-title"><Gauge size={16} /><strong>{t.extractorClock}</strong></div>
             {!clockControlUnlocked ? (
@@ -398,7 +422,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.6</div>
+          <div className="version">v0.7</div>
         </div>
       </header>
 
