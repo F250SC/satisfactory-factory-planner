@@ -29,7 +29,7 @@ import {
   footprintFor,
   rotatedFootprint,
 } from './buildingFootprints'
-import type { MachineStep, ResourceConfig } from './engine'
+import { resourceOutput, type MachineStep, type ResourceConfig } from './engine'
 
 export interface DesignerFloor {
   id: string
@@ -52,6 +52,7 @@ export interface DesignerSource {
   resourceId: string
   miner: MinerTier
   rate: number
+  capacityRate?: number
   x: number
   y: number
   floorId: string
@@ -117,6 +118,9 @@ interface Props {
   steps: MachineStep[]
   resources: PlannerResource[]
   maxBeltTier: BeltTier
+  tier: number
+  clockControlUnlocked: boolean
+  onResourceChange: (id: string, config: ResourceConfig) => void
   layout: DesignerLayout
   onChange: (layout: DesignerLayout) => void
 }
@@ -498,6 +502,9 @@ export default function FactoryDesigner({
   steps,
   resources,
   maxBeltTier,
+  tier,
+  clockControlUnlocked,
+  onResourceChange,
   layout,
   onChange,
 }: Props) {
@@ -1312,12 +1319,19 @@ export default function FactoryDesigner({
     for (const resource of resources) {
       const count = Math.max(1, resource.config.count || 1)
       const perSource = resource.usedRate / count
+      const output = resourceOutput(
+        resource.id,
+        { ...resource.config, count: 1 },
+        clockControlUnlocked,
+      )
+      const capacityPerSource = output.available
       for (let i = 0; i < count; i += 1) {
         generatedSources.push({
           id: `source-${resource.id}-${i}-${Date.now()}`,
           resourceId: resource.id,
           miner: resource.config.miner,
           rate: perSource,
+          capacityRate: capacityPerSource,
           x: 0,
           y: sourceCursor * 2,
           floorId: activeFloor.id,
