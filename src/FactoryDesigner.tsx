@@ -81,6 +81,11 @@ export interface DesignerEndpoint {
   port?: number
 }
 
+export interface DesignerBeltWaypoint {
+  x: number
+  y: number
+}
+
 export interface DesignerBelt {
   id: string
   floorId: string
@@ -88,6 +93,8 @@ export interface DesignerBelt {
   to: DesignerEndpoint
   tier: BeltTier
   materialId?: string
+  waypoints?: DesignerBeltWaypoint[]
+  routeStyle?: 'orthogonal' | 'smooth'
 }
 
 export interface DesignerLayout {
@@ -330,6 +337,77 @@ function pushPoint(point: PortPoint, distance: number) {
   return { x: point.x, y: point.y + distance }
 }
 
+function pointsToPath(
+  points: Array<{ x: number; y: number }>,
+  smooth = false,
+) {
+  if (points.length < 2) return ''
+  if (!smooth) {
+    return points
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+      .join(' ')
+  }
+
+  let d = `M ${points[0].x} ${points[0].y}`
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const current = points[i]
+    const next = points[i + 1]
+    const midX = (current.x + next.x) / 2
+    const midY = (current.y + next.y) / 2
+    d += ` Q ${current.x} ${current.y} ${midX} ${midY}`
+  }
+  const last = points[points.length - 1]
+  d += ` T ${last.x} ${last.y}`
+  return d
+}
+
+function routedPath(
+  from: PortPoint,
+  to: PortPoint,
+  waypoints: DesignerBeltWaypoint[] | undefined,
+  style: 'orthogonal' | 'smooth',
+  laneOffset = 0,
+) {
+  if (waypoints?.length) {
+    const points = [
+      { x: from.x, y: from.y },
+      ...waypoints.map((point) => ({
+        x: point.x * PIXELS_PER_METER,
+        y: point.y * PIXELS_PER_METER,
+      })),
+      { x: to.x, y: to.y },
+    ]
+    return {
+      d: pointsToPath(points, style === 'smooth'),
+      labelX: points[Math.floor(points.length / 2)].x + 5,
+      labelY: points[Math.floor(points.length / 2)].y - 5,
+    }
+  }
+
+  const base = orthogonalPath(from, to)
+  if (!laneOffset) return base
+
+  const fromStub = pushPoint(from, PORT_STUB + laneOffset)
+  const toStub = pushPoint(to, PORT_STUB + laneOffset)
+  const horizontal = from.side === 'left' || from.side === 'right'
+
+  if (horizontal) {
+    const midX = (fromStub.x + toStub.x) / 2 + laneOffset
+    return {
+      d: `M ${from.x} ${from.y} L ${fromStub.x} ${fromStub.y} L ${midX} ${fromStub.y} L ${midX} ${toStub.y} L ${toStub.x} ${toStub.y} L ${to.x} ${to.y}`,
+      labelX: midX + 4,
+      labelY: (fromStub.y + toStub.y) / 2 - 4,
+    }
+  }
+
+  const midY = (fromStub.y + toStub.y) / 2 + laneOffset
+  return {
+    d: `M ${from.x} ${from.y} L ${fromStub.x} ${fromStub.y} L ${fromStub.x} ${midY} L ${toStub.x} ${midY} L ${toStub.x} ${toStub.y} L ${to.x} ${to.y}`,
+    labelX: (fromStub.x + toStub.x) / 2 + 4,
+    labelY: midY - 4,
+  }
+}
+
 function orthogonalPath(from: PortPoint, to: PortPoint) {
   const fromStub = pushPoint(from, PORT_STUB)
   const toStub = pushPoint(to, PORT_STUB)
@@ -376,6 +454,7 @@ export default function FactoryDesigner({
   const [selectedUtilityId, setSelectedUtilityId] = useState<string | null>(null)
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
   const [selectedLiftId, setSelectedLiftId] = useState<string | null>(null)
+  const [selectedBeltId, setSelectedBeltId] = useState<string | null>(null)
   const [placementError, setPlacementError] = useState<string | null>(null)
   const [connectFrom, setConnectFrom] = useState<DesignerEndpoint | null>(null)
   const [beltToolActive, setBeltToolActive] = useState(false)
