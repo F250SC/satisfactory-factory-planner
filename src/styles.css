@@ -562,3 +562,109 @@ select:focus, input:focus { border-color: #f28c28; }
 @media (max-width: 850px) {
   .save-progress-grid { grid-template-columns: 1fr; }
 }
+
+
+/* v0.9 browser save profiles */
+.profiles-card {
+  margin-bottom: 18px;
+  padding: 22px;
+}
+.profiles-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+.profiles-head h2 {
+  margin: 4px 0 4px;
+  font-size: 24px;
+}
+.profiles-head p {
+  margin: 0;
+  color: #778493;
+  font-size: 11px;
+}
+.profile-meta {
+  padding: 7px 10px;
+  border: 1px solid #33404d;
+  border-radius: 999px;
+  background: #10161d;
+  color: #8f9cab;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.profiles-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, .8fr) minmax(380px, 1.4fr);
+  gap: 14px;
+  align-items: end;
+}
+.profiles-grid label {
+  margin: 0;
+}
+.new-profile-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+.action-button {
+  min-height: 42px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #3b4654;
+  border-radius: 9px;
+  background: #111820;
+  color: #b7c2ce;
+  font-size: 12px;
+}
+.action-button:hover {
+  border-color: #596675;
+  color: #fff;
+}
+.action-button.primary {
+  background: #f28c28;
+  border-color: #f28c28;
+  color: #17100a;
+  font-weight: 800;
+}
+.action-button.primary:hover {
+  filter: brightness(1.06);
+}
+.action-button.danger {
+  border-color: #5f3434;
+  color: #e49a9a;
+}
+.action-button.danger:hover {
+  background: #261616;
+  border-color: #8a4545;
+}
+.profile-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #2a3440;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 850px) {
+  .profiles-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .profiles-head {
+    flex-direction: column;
+  }
+  .new-profile-row {
+    grid-template-columns: 1fr;
+  }
+  .profile-actions {
+    flex-direction: column;
+  }
+}
