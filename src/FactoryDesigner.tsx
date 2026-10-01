@@ -1047,6 +1047,18 @@ export default function FactoryDesigner({
     setPlacementError(null)
   }
 
+  const updateBelt = (id: string, patch: Partial<DesignerBelt>) => {
+    writeLayout(
+      normalized.nodes,
+      normalized.floors,
+      normalized.lifts,
+      normalized.utilities,
+      normalized.belts.map((belt) =>
+        belt.id === id ? { ...belt, ...patch } : belt,
+      ),
+    )
+  }
+
   const removeBelt = (id: string) => {
     writeLayout(
       normalized.nodes,
@@ -1055,6 +1067,70 @@ export default function FactoryDesigner({
       normalized.utilities,
       normalized.belts.filter((belt) => belt.id !== id),
     )
+    if (selectedBeltId === id) setSelectedBeltId(null)
+  }
+
+  const addBeltWaypoint = (id: string) => {
+    const belt = normalized.belts.find((entry) => entry.id === id)
+    if (!belt) return
+    const from = portPoint(belt.from)
+    const to = portPoint(belt.to)
+    if (!from || !to) return
+
+    const existing = belt.waypoints ?? []
+    const points = [
+      { x: from.x / PIXELS_PER_METER, y: from.y / PIXELS_PER_METER },
+      ...existing,
+      { x: to.x / PIXELS_PER_METER, y: to.y / PIXELS_PER_METER },
+    ]
+
+    let longestIndex = 0
+    let longestDistance = -1
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const dx = points[i + 1].x - points[i].x
+      const dy = points[i + 1].y - points[i].y
+      const distance = Math.hypot(dx, dy)
+      if (distance > longestDistance) {
+        longestDistance = distance
+        longestIndex = i
+      }
+    }
+
+    const a = points[longestIndex]
+    const b = points[longestIndex + 1]
+    const waypoint = {
+      x: Math.round(((a.x + b.x) / 2) * 2) / 2,
+      y: Math.round(((a.y + b.y) / 2) * 2) / 2,
+    }
+
+    const next = [...existing]
+    next.splice(longestIndex, 0, waypoint)
+    updateBelt(id, { waypoints: next })
+  }
+
+  const moveBeltWaypoint = (
+    beltId: string,
+    index: number,
+    x: number,
+    y: number,
+  ) => {
+    const belt = normalized.belts.find((entry) => entry.id === beltId)
+    if (!belt) return
+    const next = [...(belt.waypoints ?? [])]
+    if (!next[index]) return
+    next[index] = {
+      x: Math.round(x * 2) / 2,
+      y: Math.round(y * 2) / 2,
+    }
+    updateBelt(beltId, { waypoints: next })
+  }
+
+  const removeBeltWaypoint = (beltId: string, index: number) => {
+    const belt = normalized.belts.find((entry) => entry.id === beltId)
+    if (!belt) return
+    updateBelt(beltId, {
+      waypoints: (belt.waypoints ?? []).filter((_, i) => i !== index),
+    })
   }
 
   const generateFromPlan = () => {
@@ -1787,6 +1863,7 @@ export default function FactoryDesigner({
     (utility) => utility.id === selectedUtilityId,
   )
   const selectedFootprint = selected ? footprintFor(selected.machineId) : null
+  const selectedBelt = normalized.belts.find((belt) => belt.id === selectedBeltId) ?? null
 
   const renderPorts = (
     endpointKind: DesignerEndpoint['kind'],
