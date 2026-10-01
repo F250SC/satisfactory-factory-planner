@@ -127,7 +127,9 @@ function rawRequirementPerUnit(
   }
 
   if (stack.includes(itemId)) {
-    throw new Error(`Recipe cycle detected: ${[...stack, itemId].join(' -> ')}`)
+    // Packaging/unpackaging and by-product recipe combinations can form cycles.
+    // Treat the repeated item as an external requirement instead of crashing the planner.
+    return { [itemId]: 1 }
   }
 
   const recipe = selectedRecipe(itemId, overrides)
