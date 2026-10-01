@@ -531,6 +531,53 @@ export default function FactoryDesigner({
     normalized.floors[0]
 
   useEffect(() => {
+    if (!normalized.sources.length) return
+
+    let changed = false
+    const nextSources = normalized.sources.map((source) => {
+      const resource = resources.find((entry) => entry.id === source.resourceId)
+      if (!resource) return source
+
+      const count = Math.max(
+        1,
+        normalized.sources.filter((entry) => entry.resourceId === source.resourceId).length,
+      )
+      const usedRate = resource.usedRate / count
+      const capacityRate = resourceOutput(
+        resource.id,
+        { ...resource.config, count: 1 },
+        clockControlUnlocked,
+      ).available
+
+      if (
+        Math.abs(source.rate - usedRate) > 0.0001 ||
+        Math.abs((source.capacityRate ?? source.rate) - capacityRate) > 0.0001 ||
+        source.miner !== resource.config.miner
+      ) {
+        changed = true
+        return {
+          ...source,
+          miner: resource.config.miner,
+          rate: usedRate,
+          capacityRate,
+        }
+      }
+      return source
+    })
+
+    if (changed) {
+      onChange({
+        nodes: normalized.nodes,
+        floors: normalized.floors,
+        lifts: normalized.lifts,
+        utilities: normalized.utilities,
+        belts: normalized.belts,
+        sources: nextSources,
+      })
+    }
+  }, [resources, clockControlUnlocked])
+
+  useEffect(() => {
     if (!normalized.floors.some((floor) => floor.id === activeFloorId)) {
       setActiveFloorId(normalized.floors[0].id)
       setSelectedId(null)
@@ -841,6 +888,49 @@ export default function FactoryDesigner({
     setSelectedUtilityId(id)
     setSelectedId(null)
     setPlacementError(null)
+  }
+
+  const updateSourceConfig = (
+    resourceId: string,
+    patch: Partial<ResourceConfig>,
+  ) => {
+    const current = resources.find((resource) => resource.id === resourceId)
+    if (!current) return
+
+    const nextConfig: ResourceConfig = {
+      ...current.config,
+      ...patch,
+    }
+
+    onResourceChange(resourceId, nextConfig)
+
+    const matchingSources = normalized.sources.filter(
+      (source) => source.resourceId === resourceId,
+    )
+    const count = Math.max(1, matchingSources.length)
+    const capacityRate = resourceOutput(
+      resourceId,
+      { ...nextConfig, count: 1 },
+      clockControlUnlocked,
+    ).available
+
+    writeLayout(
+      normalized.nodes,
+      normalized.floors,
+      normalized.lifts,
+      normalized.utilities,
+      normalized.belts,
+      normalized.sources.map((source) =>
+        source.resourceId === resourceId
+          ? {
+              ...source,
+              miner: nextConfig.miner,
+              rate: current.usedRate / count,
+              capacityRate,
+            }
+          : source,
+      ),
+    )
   }
 
   const removeSource = (id: string) => {
@@ -1958,6 +2048,10 @@ export default function FactoryDesigner({
   )
   const selectedSource =
     normalized.sources.find((source) => source.id === selectedSourceId) ?? null
+  const selectedResource =
+    selectedSource
+      ? resources.find((resource) => resource.id === selectedSource.resourceId) ?? null
+      : null
   const selectedLift =
     normalized.lifts.find((lift) => lift.id === selectedLiftId) ?? null
   const selectedFootprint = selected ? footprintFor(selected.machineId) : null
