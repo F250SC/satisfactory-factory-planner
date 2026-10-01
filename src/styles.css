@@ -1130,3 +1130,38 @@ select:focus, input:focus { border-color: #f28c28; }
     grid-template-columns: 1fr;
   }
 }
+
+
+/* v0.14 machine ports and automatic belt routing */
+.machine-port {
+  position: absolute;
+  z-index: 9;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #10161d;
+  cursor: crosshair;
+}
+.input-port {
+  background: #4fbf7f;
+  border: 1px solid #8ee0aa;
+}
+.output-port {
+  background: #f28c28;
+  border: 1px solid #ffc074;
+}
+.output-port.active {
+  box-shadow: 0 0 0 3px rgba(242, 140, 40, .35);
+  transform: scale(1.15);
+}
+.machine-port:hover,
+.machine-port:focus {
+  outline: none;
+  transform: scale(1.18);
+}
+.belt-arrow-head {
+  fill: #cf852f;
+}
+.belt-arrow-head.overloaded {
+  fill: #d85b45;
+}
