@@ -58,6 +58,8 @@ function normalizeLayout(value: unknown): DesignerLayout {
     utilities: Array.isArray(raw.utilities) ? raw.utilities as NonNullable<DesignerLayout['utilities']> : [],
     belts: Array.isArray(raw.belts) ? raw.belts as NonNullable<DesignerLayout['belts']> : [],
     sources: Array.isArray(raw.sources) ? raw.sources as NonNullable<DesignerLayout['sources']> : [],
+    planSignature:
+      typeof raw.planSignature === 'string' ? raw.planSignature : undefined,
   }
 }
 
