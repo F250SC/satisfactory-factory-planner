@@ -282,6 +282,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
   const [selectedLiftId, setSelectedLiftId] = useState<string | null>(null)
   const [placementError, setPlacementError] = useState<string | null>(null)
   const [connectFrom, setConnectFrom] = useState<DesignerEndpoint | null>(null)
+  const [beltToolActive, setBeltToolActive] = useState(false)
   const [defaultBeltTier, setDefaultBeltTier] = useState<BeltTier>('mk1')
 
   const activeFloor =
@@ -702,6 +703,9 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
     )
 
     if (!connectFrom) {
+      if (!beltToolActive && normalizedTarget.side !== 'output') {
+        setBeltToolActive(true)
+      }
       if (normalizedTarget.side !== 'output') {
         setPlacementError(
           lang === 'de'
@@ -711,6 +715,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
         return
       }
       setConnectFrom(normalizedTarget)
+      setBeltToolActive(true)
       setPlacementError(null)
       return
     }
@@ -768,6 +773,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
       [...normalized.belts, belt],
     )
     setConnectFrom(null)
+    setBeltToolActive(false)
     setPlacementError(null)
   }
 
@@ -1119,6 +1125,22 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
               {lang === 'de' ? 'Fördertechnik' : 'Conveyors'}
             </span>
             <div className="conveyor-tool-grid">
+              <button
+                className={`action-button ${beltToolActive ? 'tool-active' : ''}`}
+                onClick={() => {
+                  if (beltToolActive) {
+                    setConnectFrom(null)
+                    setBeltToolActive(false)
+                  } else {
+                    setConnectFrom(null)
+                    setBeltToolActive(true)
+                    setPlacementError(null)
+                  }
+                }}
+              >
+                <Unplug size={15} />
+                {lang === 'de' ? 'Förderband setzen' : 'Place conveyor belt'}
+              </button>
               <button className="action-button" onClick={() => addUtility('splitter')}>
                 <GitFork size={15} /> Splitter
               </button>
@@ -1143,15 +1165,26 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
               </select>
             </label>
 
-            {connectFrom && (
+            {beltToolActive && (
               <div className="connect-mode">
                 <Unplug size={15} />
                 <span>
-                  {lang === 'de'
-                    ? 'Ausgang gewählt – jetzt einen grünen Eingangs-Port anklicken.'
-                    : 'Output selected – now click a green input port.'}
+                  {connectFrom
+                    ? (lang === 'de'
+                      ? 'Ausgang gewählt – jetzt einen grünen Eingangs-Port anklicken.'
+                      : 'Output selected – now click a green input port.')
+                    : (lang === 'de'
+                      ? 'Förderband-Modus aktiv – zuerst einen orangenen Ausgang anklicken.'
+                      : 'Conveyor mode active – click an orange output port first.')}
                 </span>
-                <button onClick={() => setConnectFrom(null)}>×</button>
+                <button
+                  onClick={() => {
+                    setConnectFrom(null)
+                    setBeltToolActive(false)
+                  }}
+                >
+                  ×
+                </button>
               </div>
             )}
           </div>
@@ -1205,6 +1238,22 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
                 </small>
               </div>
               <div className="inspector-actions">
+                <button
+                  className="action-button"
+                  onClick={() => {
+                    setBeltToolActive(true)
+                    setConnectFrom({
+                      kind: 'node',
+                      id: selected.id,
+                      side: 'output',
+                      port: 0,
+                    })
+                    setPlacementError(null)
+                  }}
+                >
+                  <Unplug size={15} />
+                  {lang === 'de' ? 'Verbindung starten' : 'Start connection'}
+                </button>
                 <button className="action-button" onClick={() => rotateNode(selected.id)}>
                   <RotateCw size={15} />
                   {lang === 'de' ? '90° drehen' : 'Rotate 90°'}
@@ -1234,6 +1283,22 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
                   : '3 Inputs · 1 Output'}
               </p>
               <div className="inspector-actions">
+                <button
+                  className="action-button"
+                  onClick={() => {
+                    setBeltToolActive(true)
+                    setConnectFrom({
+                      kind: 'utility',
+                      id: selectedUtility.id,
+                      side: 'output',
+                      port: 0,
+                    })
+                    setPlacementError(null)
+                  }}
+                >
+                  <Unplug size={15} />
+                  {lang === 'de' ? 'Verbindung starten' : 'Start connection'}
+                </button>
                 <button
                   className="action-button"
                   onClick={() => rotateUtility(selectedUtility.id)}
