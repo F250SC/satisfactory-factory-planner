@@ -48,6 +48,15 @@ import {
 } from './progression'
 import FactoryDesigner, { type DesignerLayout } from './FactoryDesigner'
 import {
+  clampBeltToTier,
+  clampMinerToTier,
+  clampPipeToTier,
+  maxBeltForTier,
+  unlockedBelts,
+  unlockedMiners,
+  unlockedPipes,
+} from './technology'
+import {
   formatProfileDate,
   loadActiveProfileId,
   loadProfiles,
@@ -225,19 +234,11 @@ function initialConfig(): ResourceConfig {
 }
 
 function configForTier(config: ResourceConfig, tier: number): ResourceConfig {
-  const maxMiner: MinerTier = tier >= 8 ? 'mk3' : tier >= 4 ? 'mk2' : 'mk1'
-  const maxBelt: BeltTier = tier >= 9 ? 'mk6' : tier >= 7 ? 'mk5' : tier >= 5 ? 'mk4' : tier >= 4 ? 'mk3' : tier >= 2 ? 'mk2' : 'mk1'
-  const maxPipe: PipeTier = tier >= 6 ? 'mk2' : 'mk1'
-
-  const minerRank: Record<MinerTier, number> = { mk1: 1, mk2: 2, mk3: 3 }
-  const beltRank: Record<BeltTier, number> = { mk1: 1, mk2: 2, mk3: 3, mk4: 4, mk5: 5, mk6: 6 }
-  const pipeRank: Record<PipeTier, number> = { mk1: 1, mk2: 2 }
-
   return {
     ...config,
-    miner: minerRank[config.miner] > minerRank[maxMiner] ? maxMiner : config.miner,
-    belt: beltRank[config.belt] > beltRank[maxBelt] ? maxBelt : config.belt,
-    pipe: pipeRank[config.pipe] > pipeRank[maxPipe] ? maxPipe : config.pipe,
+    miner: clampMinerToTier(config.miner, tier),
+    belt: clampBeltToTier(config.belt, tier),
+    pipe: clampPipeToTier(config.pipe, tier),
   }
 }
 
@@ -295,17 +296,9 @@ function ResourceCard({
   const rate = resourceOutput(resourceId, safeConfig, clockControlUnlocked)
   const isManual = !meta
   const maxClock = 100 + safeConfig.shards * 50
-  const minerOptions: MinerTier[] = tier >= 8 ? ['mk1','mk2','mk3'] : tier >= 4 ? ['mk1','mk2'] : ['mk1']
-  const beltOptions: BeltTier[] = tier >= 7
-    ? ['mk1','mk2','mk3','mk4','mk5']
-    : tier >= 5
-      ? ['mk1','mk2','mk3','mk4']
-      : tier >= 4
-        ? ['mk1','mk2','mk3']
-        : tier >= 2
-          ? ['mk1','mk2']
-          : ['mk1']
-  const pipeOptions: PipeTier[] = tier >= 6 ? ['mk1','mk2'] : ['mk1']
+  const minerOptions = unlockedMiners(tier)
+  const beltOptions = unlockedBelts(tier)
+  const pipeOptions = unlockedPipes(tier)
 
   return (
     <section className="card resource-card">
@@ -870,7 +863,7 @@ export default function App() {
               config: configForTier(ensuredConfigs[id] ?? initialConfig(), tier),
               usedRate: result.rawUsed[id] ?? 0,
             }))}
-            maxBeltTier={tier >= 9 ? 'mk6' : tier >= 7 ? 'mk5' : tier >= 5 ? 'mk4' : tier >= 4 ? 'mk3' : tier >= 2 ? 'mk2' : 'mk1'}
+            maxBeltTier={maxBeltForTier(tier)}
             tier={tier}
             clockControlUnlocked={clockControlUnlocked}
             onResourceChange={setResource}
