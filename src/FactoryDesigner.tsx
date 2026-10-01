@@ -511,7 +511,7 @@ export default function FactoryDesigner({
   layout,
   onChange,
 }: Props) {
-  const normalized = normalizeLayout(layout)
+  const normalized = useMemo(() => normalizeLayout(layout), [layout])
   const [activeFloorId, setActiveFloorId] = useState(normalized.floors[0].id)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedUtilityId, setSelectedUtilityId] = useState<string | null>(null)
@@ -528,7 +528,7 @@ export default function FactoryDesigner({
   const [isPanning, setIsPanning] = useState(false)
   const [panAnchor, setPanAnchor] = useState({ x: 0, y: 0 })
   const [fitAfterLayout, setFitAfterLayout] = useState(false)
-  const beltOptions = unlockedBelts(tier)
+  const beltOptions = useMemo(() => unlockedBelts(tier), [tier])
 
   const activeFloor =
     normalized.floors.find((floor) => floor.id === activeFloorId) ??
@@ -613,22 +613,43 @@ export default function FactoryDesigner({
     }
   }, [layout, activeFloorId])
 
-  const activeNodes = normalized.nodes.filter(
-    (node) => (node.floorId ?? normalized.floors[0].id) === activeFloor.id,
+  const activeNodes = useMemo(
+    () =>
+      normalized.nodes.filter(
+        (node) =>
+          (node.floorId ?? normalized.floors[0].id) === activeFloor.id,
+      ),
+    [normalized.nodes, normalized.floors, activeFloor.id],
   )
-  const activeSources = normalized.sources.filter(
-    (source) => source.floorId === activeFloor.id,
+  const activeSources = useMemo(
+    () =>
+      normalized.sources.filter(
+        (source) => source.floorId === activeFloor.id,
+      ),
+    [normalized.sources, activeFloor.id],
   )
-  const activeUtilities = normalized.utilities.filter(
-    (utility) => utility.floorId === activeFloor.id,
+  const activeUtilities = useMemo(
+    () =>
+      normalized.utilities.filter(
+        (utility) => utility.floorId === activeFloor.id,
+      ),
+    [normalized.utilities, activeFloor.id],
   )
-  const activeBelts = normalized.belts.filter(
-    (belt) => belt.floorId === activeFloor.id,
+  const activeBelts = useMemo(
+    () =>
+      normalized.belts.filter(
+        (belt) => belt.floorId === activeFloor.id,
+      ),
+    [normalized.belts, activeFloor.id],
   )
-  const floorLifts = normalized.lifts.filter(
-    (lift) =>
-      lift.fromFloorId === activeFloor.id ||
-      lift.toFloorId === activeFloor.id,
+  const floorLifts = useMemo(
+    () =>
+      normalized.lifts.filter(
+        (lift) =>
+          lift.fromFloorId === activeFloor.id ||
+          lift.toFloorId === activeFloor.id,
+      ),
+    [normalized.lifts, activeFloor.id],
   )
 
   const palette = useMemo(() => {
