@@ -457,3 +457,108 @@ select:focus, input:focus { border-color: #f28c28; }
   margin-top: 3px;
   font-size: 13px;
 }
+
+
+/* v0.8 save progression */
+.save-progress {
+  margin-bottom: 18px;
+  padding: 22px;
+}
+.save-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.save-progress-head h2 {
+  margin: 4px 0 0;
+  font-size: 24px;
+}
+.profile-badge {
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid #3a4654;
+  background: #111820;
+  color: #a9b5c2;
+  font-size: 11px;
+}
+.save-progress-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, .8fr) minmax(360px, 1.4fr);
+  gap: 16px;
+  align-items: start;
+}
+.save-progress-grid label {
+  margin: 0;
+}
+.save-progress-grid label small {
+  display: block;
+  margin-top: 6px;
+  color: #72808e;
+  line-height: 1.4;
+}
+.alternate-picker {
+  border: 1px solid #2f3946;
+  border-radius: 12px;
+  background: #10161d;
+  overflow: hidden;
+}
+.alternate-picker summary {
+  cursor: pointer;
+  padding: 13px 14px;
+  color: #dbe3ec;
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+}
+.alternate-picker summary::-webkit-details-marker {
+  display: none;
+}
+.alternate-picker[open] summary {
+  border-bottom: 1px solid #2a3440;
+}
+.alternate-picker > p {
+  margin: 12px 14px 8px;
+  color: #7e8b99;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.alternate-list {
+  max-height: 280px;
+  overflow: auto;
+  padding: 6px 10px 12px;
+  display: grid;
+  gap: 5px;
+}
+.alternate-check {
+  margin: 0 !important;
+  padding: 8px 9px;
+  display: flex !important;
+  align-items: center;
+  gap: 9px;
+  border-radius: 8px;
+  background: #141c25;
+}
+.alternate-check:hover {
+  background: #19232e;
+}
+.alternate-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #f28c28;
+}
+.alternate-check span {
+  color: #aab5c2;
+  font-size: 12px;
+}
+.muted {
+  padding: 10px;
+  color: #6f7c89;
+  font-size: 12px;
+}
+
+@media (max-width: 850px) {
+  .save-progress-grid { grid-template-columns: 1fr; }
+}
