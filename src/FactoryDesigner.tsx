@@ -182,6 +182,35 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
             gridTemplateColumns: `repeat(${GRID_W}, 56px)`,
             gridTemplateRows: `repeat(${GRID_H}, 56px)`,
           }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            const id = e.dataTransfer.getData('text/plain')
+            if (!id) return
+
+            const grid = e.currentTarget
+            const rect = grid.getBoundingClientRect()
+            const x = Math.max(
+              0,
+              Math.min(
+                GRID_W - 1,
+                Math.floor((e.clientX - rect.left + grid.scrollLeft) / 56),
+              ),
+            )
+            const y = Math.max(
+              0,
+              Math.min(
+                GRID_H - 1,
+                Math.floor((e.clientY - rect.top + grid.scrollTop) / 56),
+              ),
+            )
+
+            updateNode(id, { x, y })
+            setSelectedId(id)
+          }}
         >
           {Array.from({ length: GRID_W * GRID_H }).map((_, index) => {
             const x = index % GRID_W
@@ -190,13 +219,6 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
               <div
                 key={index}
                 className="foundation-cell"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  const id = e.dataTransfer.getData('text/plain')
-                  if (!id) return
-                  updateNode(id, { x, y })
-                }}
                 onClick={() => {
                   if (!selectedId) return
                   updateNode(selectedId, { x, y })
@@ -209,7 +231,11 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
             <button
               key={node.id}
               draggable
-              onDragStart={(e) => e.dataTransfer.setData('text/plain', node.id)}
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/plain', node.id)
+                setSelectedId(node.id)
+              }}
               onClick={() => setSelectedId(node.id)}
               className={`factory-node ${selectedId === node.id ? 'selected' : ''}`}
               style={{
