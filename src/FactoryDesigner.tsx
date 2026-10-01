@@ -937,6 +937,19 @@ export default function FactoryDesigner({
     setPlacementError(null)
   }
 
+  const removeLift = (id: string) => {
+    writeLayout(
+      normalized.nodes,
+      normalized.floors,
+      normalized.lifts.filter((lift) => lift.id !== id),
+      normalized.utilities,
+      normalized.belts,
+      normalized.sources,
+    )
+    if (selectedLiftId === id) setSelectedLiftId(null)
+    setPlacementError(null)
+  }
+
   const rotateNode = (id: string) => {
     const node = normalized.nodes.find((entry) => entry.id === id)
     if (!node) return
