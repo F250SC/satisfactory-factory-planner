@@ -1551,3 +1551,7 @@ select:focus, input:focus { border-color: #f28c28; }
     grid-column: auto;
   }
 }
+
+.route-style-buttons {
+  grid-template-columns: repeat(3, 1fr);
+}
