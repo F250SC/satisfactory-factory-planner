@@ -58,6 +58,8 @@ import {
   type SavedProfile,
 } from './profiles'
 
+// v0.20.1: retrigger deployment after unified Factory Designer selection update
+
 type Lang = 'de' | 'en'
 
 const ui = {
@@ -633,7 +635,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.20</div>
+          <div className="version">v0.20.1</div>
         </div>
       </header>
 
