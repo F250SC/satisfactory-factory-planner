@@ -424,3 +424,36 @@ select:focus, input:focus { border-color: #f28c28; }
 @media (max-width: 600px) {
   .result-comparison { grid-template-columns: 1fr; }
 }
+
+
+/* v0.7 local game assets */
+.extractor-visual {
+  margin-top: 14px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #2b3440;
+  border-radius: 10px;
+  background: #10161d;
+}
+.extractor-visual img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+.extractor-visual span,
+.extractor-visual strong {
+  display: block;
+}
+.extractor-visual span {
+  color: #7f8c9a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.extractor-visual strong {
+  margin-top: 3px;
+  font-size: 13px;
+}
