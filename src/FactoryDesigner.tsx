@@ -6,7 +6,6 @@ import {
   Layers3,
   Maximize2,
   Merge,
-  Minus,
   Plus,
   RotateCw,
   Trash2,
@@ -950,10 +949,7 @@ export default function FactoryDesigner({
 
     const nodeFitsLocal = (candidate: DesignerNode) => {
       const rect = rectFor(candidate)
-      if (
-        rect.right > GRID_W * FOUNDATION_METERS ||
-        rect.bottom > GRID_H * FOUNDATION_METERS
-      ) return false
+      if (rect.left < 0 || rect.top < 0) return false
       if (generatedNodes.some((node) => overlaps(rect, rectFor(node)))) return false
       return !generatedSources.some((source) => overlaps(rect, sourceRect(source)))
     }
