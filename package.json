@@ -1,13 +1,14 @@
 {
   "name": "satisfactory-factory-planner",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.23.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run sync:assets && tsc -b && vite build",
+    "build": "npm run check && npm run sync:assets && vite build",
     "preview": "vite preview",
-    "sync:assets": "node scripts/sync-assets.mjs"
+    "sync:assets": "node scripts/sync-assets.mjs",
+    "check": "tsc -b && node scripts/validate-data.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",
