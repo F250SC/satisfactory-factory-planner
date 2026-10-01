@@ -1,4 +1,5 @@
 import gameData from './gameData.json'
+import deTranslations from './deTranslations.json'
 
 export type Purity = 'impure' | 'normal' | 'pure'
 export type MinerTier = 'mk1' | 'mk2' | 'mk3'
@@ -101,8 +102,23 @@ export const machineGermanNames: Record<string, string> = {
   Desc_FoundryMk1_C: 'Gießerei',
 }
 
-export function itemName(id: string) {
+export function itemName(id: string, lang: 'de' | 'en' = 'en') {
+  if (lang === 'de') {
+    return (deTranslations as Record<string, string>)[id] ?? items[id]?.name ?? id.replace(/^Desc_/, '').replace(/_C$/, '')
+  }
   return items[id]?.name ?? id.replace(/^Desc_/, '').replace(/_C$/, '')
+}
+
+export function itemIconUrl(id: string) {
+  const icon = items[id]?.icon
+  if (!icon) return null
+  return `https://raw.githubusercontent.com/ShortByte/satisfactory-workbench/develop/public/icons/items/${icon}.png`
+}
+
+export function machineIconUrl(id: string) {
+  const name = buildings[id]?.name
+  if (!name) return null
+  return `https://satisfactory.wiki.gg/wiki/Special:Redirect/file/${encodeURIComponent(name)}.png`
 }
 
 export function recipesForProduct(itemId: string) {
@@ -117,7 +133,7 @@ export const targetItems = Array.from(
   new Set(recipes.flatMap((recipe) => recipe.products.map((product) => product.item)))
 )
   .filter((id) => items[id])
-  .sort((a, b) => itemName(a).localeCompare(itemName(b)))
+  .sort((a, b) => itemName(a, 'en').localeCompare(itemName(b, 'en')))
 
 export function defaultRecipeFor(itemId: string) {
   const candidates = recipesForProduct(itemId)
