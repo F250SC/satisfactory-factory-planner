@@ -344,3 +344,50 @@ select:focus, input:focus { border-color: #f28c28; }
   .clock-controls { grid-template-columns: 1fr; }
   .target-product-preview { display: none; }
 }
+
+
+/* v0.5 practical vs theoretical production */
+.status.clock-limited {
+  background: #3a2818;
+  color: #ffc078;
+  border-color: #7a4f25;
+}
+.theoretical-line {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  color: #7f8d9d;
+  font-size: 12px;
+}
+.theoretical-line strong {
+  color: #b8c3cf;
+}
+.clock-limit-note {
+  margin: 16px 0 0;
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 11px 13px;
+  border: 1px solid #65431f;
+  border-radius: 10px;
+  background: #21180f;
+  color: #d6ad7c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.clock-limit-note svg {
+  color: #f2a34a;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.surplus-note {
+  color: #d6bd68 !important;
+  margin-top: 4px !important;
+}
+.recipe-chip .thumb-fallback,
+.with-thumb .thumb-fallback {
+  width: 30px;
+  height: 30px;
+}
