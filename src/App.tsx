@@ -53,7 +53,6 @@ import {
   clampBeltToTier,
   clampMinerToTier,
   clampPipeToTier,
-  maxBeltForTier,
   unlockedBelts,
   unlockedMiners,
   unlockedPipes,
@@ -661,8 +660,8 @@ export default function App() {
 
       <div className="shell">
         <nav className="main-tabs">
-          <button className={activeView === 'planner' ? 'active' : ''} onClick={() => setActiveView('planner')}>Produktionsplaner</button>
-          <button className={activeView === 'designer' ? 'active' : ''} onClick={() => setActiveView('designer')}>Factory Designer</button>
+          <button className={activeView === 'planner' ? 'active' : ''} onClick={() => setActiveView('planner')}>{t.planner}</button>
+          <button className={activeView === 'designer' ? 'active' : ''} onClick={() => setActiveView('designer')}>{t.designer}</button>
         </nav>
 
         {activeView === 'planner' ? <>
@@ -889,7 +888,9 @@ export default function App() {
 
         <section className="next-card">
           <span className="eyebrow">{t.coming}</span><h2>{t.designer}</h2><p>{t.designerText}</p>
-          <button className="action-button primary" onClick={() => setActiveView('designer')}>Factory Designer öffnen</button>
+          <button className="action-button primary" onClick={() => setActiveView('designer')}>
+            {lang === 'de' ? 'Factory Designer öffnen' : 'Open Factory Designer'}
+          </button>
         </section>
         </> : (
           <>
@@ -911,7 +912,6 @@ export default function App() {
               config: configForTier(ensuredConfigs[id] ?? initialConfig(), tier),
               usedRate: result.rawUsed[id] ?? 0,
             }))}
-            maxBeltTier={maxBeltForTier(tier)}
             tier={tier}
             clockControlUnlocked={clockControlUnlocked}
             onResourceChange={setResource}
