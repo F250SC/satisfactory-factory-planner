@@ -4,7 +4,7 @@ A resource-first production planner for **Satisfactory**.
 
 Instead of starting with a desired output rate, the planner starts with the resource nodes, extractors and transport technology you actually have and calculates what production is possible.
 
-## v0.5
+## v0.9
 
 - Complete automatable production dataset: **276 machine recipes**
 - Standard and alternate recipes
@@ -35,6 +35,11 @@ Instead of starting with a desired output rate, the planner starts with the reso
 - Resource surplus and transport bottleneck status
 - German / English interface
 - Responsive web UI
+- Tier-aware progression profile
+- Hard-drive alternate recipe unlock selection
+- Named browser save profiles
+- Automatic local save of planner settings per profile
+- Profile switching preserves target, recipes, tier, alternates, clock settings and resource-node configuration
 
 ## Clock-speed model
 
