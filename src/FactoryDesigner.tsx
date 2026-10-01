@@ -56,6 +56,8 @@ export interface DesignerLift {
 export interface DesignerEndpoint {
   kind: 'node' | 'utility'
   id: string
+  side?: 'input' | 'output'
+  port?: number
 }
 
 export interface DesignerBelt {
@@ -81,11 +83,21 @@ interface Props {
   onChange: (layout: DesignerLayout) => void
 }
 
+type Side = 'left' | 'right' | 'top' | 'bottom'
+
+interface PortPoint {
+  x: number
+  y: number
+  side: Side
+}
+
 const GRID_W = 18
 const GRID_H = 12
 const CELL_PX = FOUNDATION_METERS * PIXELS_PER_METER
 const DEFAULT_FLOOR_GAP_M = 16
 const UTILITY_SIZE_M = 4
+const PORT_SIZE = 10
+const PORT_STUB = 18
 
 const DEFAULT_FLOOR: DesignerFloor = {
   id: 'floor-ground',
@@ -101,6 +113,17 @@ function machineLabel(machineId: string) {
     .replace(/([a-z])([A-Z])/g, '$1 $2')
 }
 
+function normalizeEndpoint(
+  endpoint: DesignerEndpoint,
+  fallbackSide: 'input' | 'output',
+): DesignerEndpoint {
+  return {
+    ...endpoint,
+    side: endpoint.side ?? fallbackSide,
+    port: endpoint.port ?? 0,
+  }
+}
+
 function normalizeLayout(layout: DesignerLayout): Required<DesignerLayout> {
   const floors = layout.floors?.length ? layout.floors : [DEFAULT_FLOOR]
   const groundId = floors[0].id
@@ -113,7 +136,11 @@ function normalizeLayout(layout: DesignerLayout): Required<DesignerLayout> {
     })),
     utilities: layout.utilities ?? [],
     lifts: layout.lifts ?? [],
-    belts: layout.belts ?? [],
+    belts: (layout.belts ?? []).map((belt) => ({
+      ...belt,
+      from: normalizeEndpoint(belt.from, 'output'),
+      to: normalizeEndpoint(belt.to, 'input'),
+    })),
   }
 }
 
@@ -149,7 +176,102 @@ function overlaps(
 }
 
 function endpointKey(endpoint: DesignerEndpoint) {
-  return `${endpoint.kind}:${endpoint.id}`
+  return `${endpoint.kind}:${endpoint.id}:${endpoint.side ?? ''}:${endpoint.port ?? 0}`
+}
+
+function sideFor(
+  role: 'input' | 'output',
+  rotation: 0 | 90 | 180 | 270,
+): Side {
+  const inputByRotation: Record<DesignerNode['rotation'], Side> = {
+    0: 'left',
+    90: 'top',
+    180: 'right',
+    270: 'bottom',
+  }
+  const outputByRotation: Record<DesignerNode['rotation'], Side> = {
+    0: 'right',
+    90: 'bottom',
+    180: 'left',
+    270: 'top',
+  }
+  return role === 'input'
+    ? inputByRotation[rotation]
+    : outputByRotation[rotation]
+}
+
+function distributedPoint(
+  rectPx: { left: number; top: number; right: number; bottom: number },
+  side: Side,
+  index: number,
+  count: number,
+): PortPoint {
+  const fraction = (index + 1) / (count + 1)
+  if (side === 'left') {
+    return {
+      x: rectPx.left,
+      y: rectPx.top + (rectPx.bottom - rectPx.top) * fraction,
+      side,
+    }
+  }
+  if (side === 'right') {
+    return {
+      x: rectPx.right,
+      y: rectPx.top + (rectPx.bottom - rectPx.top) * fraction,
+      side,
+    }
+  }
+  if (side === 'top') {
+    return {
+      x: rectPx.left + (rectPx.right - rectPx.left) * fraction,
+      y: rectPx.top,
+      side,
+    }
+  }
+  return {
+    x: rectPx.left + (rectPx.right - rectPx.left) * fraction,
+    y: rectPx.bottom,
+    side,
+  }
+}
+
+function pushPoint(point: PortPoint, distance: number) {
+  if (point.side === 'left') return { x: point.x - distance, y: point.y }
+  if (point.side === 'right') return { x: point.x + distance, y: point.y }
+  if (point.side === 'top') return { x: point.x, y: point.y - distance }
+  return { x: point.x, y: point.y + distance }
+}
+
+function orthogonalPath(from: PortPoint, to: PortPoint) {
+  const fromStub = pushPoint(from, PORT_STUB)
+  const toStub = pushPoint(to, PORT_STUB)
+
+  const fromHorizontal = from.side === 'left' || from.side === 'right'
+  const toHorizontal = to.side === 'left' || to.side === 'right'
+
+  if (fromHorizontal && toHorizontal) {
+    const midX = (fromStub.x + toStub.x) / 2
+    return {
+      d: `M ${from.x} ${from.y} L ${fromStub.x} ${fromStub.y} L ${midX} ${fromStub.y} L ${midX} ${toStub.y} L ${toStub.x} ${toStub.y} L ${to.x} ${to.y}`,
+      labelX: midX + 5,
+      labelY: (fromStub.y + toStub.y) / 2 - 5,
+    }
+  }
+
+  if (!fromHorizontal && !toHorizontal) {
+    const midY = (fromStub.y + toStub.y) / 2
+    return {
+      d: `M ${from.x} ${from.y} L ${fromStub.x} ${fromStub.y} L ${fromStub.x} ${midY} L ${toStub.x} ${midY} L ${toStub.x} ${toStub.y} L ${to.x} ${to.y}`,
+      labelX: (fromStub.x + toStub.x) / 2 + 5,
+      labelY: midY - 5,
+    }
+  }
+
+  return {
+    d: `M ${from.x} ${from.y} L ${fromStub.x} ${fromStub.y} L ${toStub.x} ${fromStub.y} L ${toStub.x} ${toStub.y} L ${to.x} ${to.y}`,
+    labelX: (fromStub.x + toStub.x) / 2 + 5,
+    labelY: fromStub.y - 5,
+  }
 }
 
 export default function FactoryDesigner({ lang, steps, layout, onChange }: Props) {
@@ -182,7 +304,6 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
   const activeBelts = normalized.belts.filter(
     (belt) => belt.floorId === activeFloor.id,
   )
-
   const floorLifts = normalized.lifts.filter(
     (lift) =>
       lift.fromFloorId === activeFloor.id ||
@@ -213,22 +334,77 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
     onChange({ nodes, floors, lifts, utilities, belts })
   }
 
-  const objectRect = (endpoint: DesignerEndpoint) => {
-    if (endpoint.kind === 'node') {
-      const node = normalized.nodes.find((entry) => entry.id === endpoint.id)
-      return node ? rectFor(node) : null
-    }
-    const utility = normalized.utilities.find((entry) => entry.id === endpoint.id)
-    return utility ? utilityRect(utility) : null
+  const stepForNode = (nodeId: string) => {
+    const node = normalized.nodes.find((entry) => entry.id === nodeId)
+    if (!node) return null
+    return (
+      steps.find(
+        (step) =>
+          step.item === node.itemId &&
+          step.recipe.producedIn === node.machineId,
+      ) ?? null
+    )
   }
 
-  const objectCenterPx = (endpoint: DesignerEndpoint) => {
-    const rect = objectRect(endpoint)
-    if (!rect) return null
-    return {
-      x: ((rect.left + rect.right) / 2) * PIXELS_PER_METER,
-      y: ((rect.top + rect.bottom) / 2) * PIXELS_PER_METER,
+  const portCounts = (endpoint: DesignerEndpoint) => {
+    if (endpoint.kind === 'utility') {
+      const utility = normalized.utilities.find((entry) => entry.id === endpoint.id)
+      if (!utility) return { input: 1, output: 1 }
+      return utility.kind === 'splitter'
+        ? { input: 1, output: 3 }
+        : { input: 3, output: 1 }
     }
+
+    const step = stepForNode(endpoint.id)
+    return {
+      input: Math.max(1, step?.recipe.ingredients.length ?? 1),
+      output: Math.max(1, step?.recipe.products.length ?? 1),
+    }
+  }
+
+  const portPoint = (endpoint: DesignerEndpoint): PortPoint | null => {
+    const role = endpoint.side ?? 'output'
+    const counts = portCounts(endpoint)
+    const portIndex = Math.max(
+      0,
+      Math.min((role === 'input' ? counts.input : counts.output) - 1, endpoint.port ?? 0),
+    )
+
+    if (endpoint.kind === 'node') {
+      const node = normalized.nodes.find((entry) => entry.id === endpoint.id)
+      if (!node) return null
+      const rect = rectFor(node)
+      const rectPx = {
+        left: rect.left * PIXELS_PER_METER,
+        top: rect.top * PIXELS_PER_METER,
+        right: rect.right * PIXELS_PER_METER,
+        bottom: rect.bottom * PIXELS_PER_METER,
+      }
+      const side = sideFor(role, node.rotation)
+      return distributedPoint(
+        rectPx,
+        side,
+        portIndex,
+        role === 'input' ? counts.input : counts.output,
+      )
+    }
+
+    const utility = normalized.utilities.find((entry) => entry.id === endpoint.id)
+    if (!utility) return null
+    const rect = utilityRect(utility)
+    const rectPx = {
+      left: rect.left * PIXELS_PER_METER,
+      top: rect.top * PIXELS_PER_METER,
+      right: rect.right * PIXELS_PER_METER,
+      bottom: rect.bottom * PIXELS_PER_METER,
+    }
+    const side = sideFor(role, utility.rotation)
+    return distributedPoint(
+      rectPx,
+      side,
+      portIndex,
+      role === 'input' ? counts.input : counts.output,
+    )
   }
 
   const fits = (
@@ -252,7 +428,6 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
       if ((node.floorId ?? normalized.floors[0].id) !== candidate.floorId) return false
       return overlaps(rect, rectFor(node))
     })
-
     if (machineCollision) return false
 
     return !normalized.utilities.some((utility) => {
@@ -261,10 +436,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
     })
   }
 
-  const utilityFits = (
-    candidate: DesignerUtility,
-    ignoreId?: string,
-  ) => {
+  const utilityFits = (candidate: DesignerUtility, ignoreId?: string) => {
     const rect = utilityRect(candidate)
     if (
       rect.right > GRID_W * FOUNDATION_METERS ||
@@ -310,9 +482,11 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
   const addNode = (machineId: string, itemId: string) => {
     const spot = findFreeSpot(machineId, itemId, normalized.nodes, activeFloor.id)
     if (!spot) {
-      setPlacementError(lang === 'de'
-        ? 'Für diese Maschine ist auf der aktiven Etage kein freier Platz mehr.'
-        : 'There is no free space for this machine on the active floor.')
+      setPlacementError(
+        lang === 'de'
+          ? 'Für diese Maschine ist auf der aktiven Etage kein freier Platz mehr.'
+          : 'There is no free space for this machine on the active floor.',
+      )
       return
     }
 
@@ -358,9 +532,11 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
       }
     }
 
-    setPlacementError(lang === 'de'
-      ? 'Kein freier Platz für dieses Förderobjekt.'
-      : 'No free space for this conveyor object.')
+    setPlacementError(
+      lang === 'de'
+        ? 'Kein freier Platz für dieses Förderobjekt.'
+        : 'No free space for this conveyor object.',
+    )
   }
 
   const moveNode = (id: string, x: number, y: number) => {
@@ -369,13 +545,17 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
 
     const candidate = { ...node, x, y, floorId: activeFloor.id }
     if (!fits(candidate, normalized.nodes, id)) {
-      setPlacementError(lang === 'de'
-        ? 'Dort passt die Maschine nicht: Kollision oder außerhalb der Foundation-Fläche.'
-        : 'The machine does not fit there: collision or outside the foundation area.')
+      setPlacementError(
+        lang === 'de'
+          ? 'Dort passt die Maschine nicht: Kollision oder außerhalb der Foundation-Fläche.'
+          : 'The machine does not fit there: collision or outside the foundation area.',
+      )
       return
     }
 
-    writeLayout(normalized.nodes.map((entry) => entry.id === id ? candidate : entry))
+    writeLayout(
+      normalized.nodes.map((entry) => (entry.id === id ? candidate : entry)),
+    )
     setSelectedId(id)
     setSelectedUtilityId(null)
     setPlacementError(null)
@@ -386,9 +566,11 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
     if (!utility) return
     const candidate = { ...utility, x, y, floorId: activeFloor.id }
     if (!utilityFits(candidate, id)) {
-      setPlacementError(lang === 'de'
-        ? 'Dort ist kein Platz für Splitter/Merger.'
-        : 'There is no room for the splitter/merger there.')
+      setPlacementError(
+        lang === 'de'
+          ? 'Dort ist kein Platz für Splitter/Merger.'
+          : 'There is no room for the splitter/merger there.',
+      )
       return
     }
 
@@ -396,7 +578,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
       normalized.nodes,
       normalized.floors,
       normalized.lifts,
-      normalized.utilities.map((entry) => entry.id === id ? candidate : entry),
+      normalized.utilities.map((entry) => (entry.id === id ? candidate : entry)),
     )
     setSelectedUtilityId(id)
     setSelectedId(null)
@@ -410,70 +592,118 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
     const rotation = ((node.rotation + 90) % 360) as DesignerNode['rotation']
     const candidate = { ...node, rotation }
     if (!fits(candidate, normalized.nodes, id)) {
-      setPlacementError(lang === 'de'
-        ? 'Zum Drehen ist auf dieser Etage nicht genug freier Platz.'
-        : 'There is not enough free space on this floor to rotate the machine.')
+      setPlacementError(
+        lang === 'de'
+          ? 'Zum Drehen ist auf dieser Etage nicht genug freier Platz.'
+          : 'There is not enough free space on this floor to rotate the machine.',
+      )
       return
     }
 
-    writeLayout(normalized.nodes.map((entry) => entry.id === id ? candidate : entry))
+    writeLayout(
+      normalized.nodes.map((entry) => (entry.id === id ? candidate : entry)),
+    )
     setPlacementError(null)
+  }
+
+  const rotateUtility = (id: string) => {
+    const utility = normalized.utilities.find((entry) => entry.id === id)
+    if (!utility) return
+    const rotation = ((utility.rotation + 90) % 360) as DesignerUtility['rotation']
+    writeLayout(
+      normalized.nodes,
+      normalized.floors,
+      normalized.lifts,
+      normalized.utilities.map((entry) =>
+        entry.id === id ? { ...entry, rotation } : entry,
+      ),
+    )
   }
 
   const removeEndpointBelts = (endpoint: DesignerEndpoint) =>
     normalized.belts.filter(
       (belt) =>
-        endpointKey(belt.from) !== endpointKey(endpoint) &&
-        endpointKey(belt.to) !== endpointKey(endpoint),
+        !(belt.from.kind === endpoint.kind && belt.from.id === endpoint.id) &&
+        !(belt.to.kind === endpoint.kind && belt.to.id === endpoint.id),
     )
 
   const removeNode = (id: string) => {
-    const endpoint: DesignerEndpoint = { kind: 'node', id }
     writeLayout(
       normalized.nodes.filter((node) => node.id !== id),
       normalized.floors,
       normalized.lifts,
       normalized.utilities,
-      removeEndpointBelts(endpoint),
+      removeEndpointBelts({ kind: 'node', id }),
     )
     if (selectedId === id) setSelectedId(null)
     setPlacementError(null)
   }
 
   const removeUtility = (id: string) => {
-    const endpoint: DesignerEndpoint = { kind: 'utility', id }
     writeLayout(
       normalized.nodes,
       normalized.floors,
       normalized.lifts,
       normalized.utilities.filter((utility) => utility.id !== id),
-      removeEndpointBelts(endpoint),
+      removeEndpointBelts({ kind: 'utility', id }),
     )
     if (selectedUtilityId === id) setSelectedUtilityId(null)
     setPlacementError(null)
   }
 
   const connectTo = (target: DesignerEndpoint) => {
+    const normalizedTarget = normalizeEndpoint(
+      target,
+      connectFrom ? 'input' : 'output',
+    )
+
     if (!connectFrom) {
-      setConnectFrom(target)
+      if (normalizedTarget.side !== 'output') {
+        setPlacementError(
+          lang === 'de'
+            ? 'Eine Verbindung muss an einem Ausgang starten.'
+            : 'A connection must start at an output port.',
+        )
+        return
+      }
+      setConnectFrom(normalizedTarget)
       setPlacementError(null)
       return
     }
 
-    if (endpointKey(connectFrom) === endpointKey(target)) {
-      setConnectFrom(null)
+    if (normalizedTarget.side !== 'input') {
+      setPlacementError(
+        lang === 'de'
+          ? 'Wähle jetzt einen Eingangs-Port als Ziel.'
+          : 'Now choose an input port as the target.',
+      )
+      return
+    }
+
+    if (
+      connectFrom.kind === normalizedTarget.kind &&
+      connectFrom.id === normalizedTarget.id
+    ) {
+      setPlacementError(
+        lang === 'de'
+          ? 'Ein Objekt kann nicht mit sich selbst verbunden werden.'
+          : 'An object cannot be connected to itself.',
+      )
       return
     }
 
     const exists = normalized.belts.some(
       (belt) =>
         endpointKey(belt.from) === endpointKey(connectFrom) &&
-        endpointKey(belt.to) === endpointKey(target),
+        endpointKey(belt.to) === endpointKey(normalizedTarget),
     )
+
     if (exists) {
-      setPlacementError(lang === 'de'
-        ? 'Diese Verbindung existiert bereits.'
-        : 'This connection already exists.')
+      setPlacementError(
+        lang === 'de'
+          ? 'Diese Port-Verbindung existiert bereits.'
+          : 'This port connection already exists.',
+      )
       setConnectFrom(null)
       return
     }
@@ -482,7 +712,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
       id: `belt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       floorId: activeFloor.id,
       from: connectFrom,
-      to: target,
+      to: normalizedTarget,
       tier: defaultBeltTier,
     }
 
@@ -514,11 +744,18 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
 
     for (const step of steps) {
       for (let i = 0; i < step.machines; i++) {
-        const spot = findFreeSpot(step.recipe.producedIn, step.item, nodes, activeFloor.id)
+        const spot = findFreeSpot(
+          step.recipe.producedIn,
+          step.item,
+          nodes,
+          activeFloor.id,
+        )
         if (!spot) {
-          setPlacementError(lang === 'de'
-            ? 'Die komplette Produktionskette passt nicht auf die aktive Etage.'
-            : 'The complete production chain does not fit on the active floor.')
+          setPlacementError(
+            lang === 'de'
+              ? 'Die komplette Produktionskette passt nicht auf die aktive Etage.'
+              : 'The complete production chain does not fit on the active floor.',
+          )
           writeLayout(nodes)
           return
         }
@@ -558,21 +795,21 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
   }
 
   const deleteFloor = () => {
-    if (normalized.floors.length <= 1) {
-      setPlacementError(lang === 'de'
-        ? 'Die letzte Etage kann nicht gelöscht werden.'
-        : 'The final floor cannot be deleted.')
-      return
-    }
-
+    if (normalized.floors.length <= 1) return
     const floor = activeFloor
     const remainingFloors = normalized.floors.filter((entry) => entry.id !== floor.id)
     const remainingNodes = normalized.nodes.filter((node) => node.floorId !== floor.id)
-    const remainingUtilities = normalized.utilities.filter((utility) => utility.floorId !== floor.id)
-    const remainingLifts = normalized.lifts.filter(
-      (lift) => lift.fromFloorId !== floor.id && lift.toFloorId !== floor.id,
+    const remainingUtilities = normalized.utilities.filter(
+      (utility) => utility.floorId !== floor.id,
     )
-    const remainingBelts = normalized.belts.filter((belt) => belt.floorId !== floor.id)
+    const remainingLifts = normalized.lifts.filter(
+      (lift) =>
+        lift.fromFloorId !== floor.id &&
+        lift.toFloorId !== floor.id,
+    )
+    const remainingBelts = normalized.belts.filter(
+      (belt) => belt.floorId !== floor.id,
+    )
 
     writeLayout(
       remainingNodes,
@@ -588,38 +825,26 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
   }
 
   const addLift = () => {
-    const currentIndex = normalized.floors.findIndex((floor) => floor.id === activeFloor.id)
-    const targetFloor = normalized.floors[currentIndex + 1] ?? normalized.floors[currentIndex - 1]
+    const currentIndex = normalized.floors.findIndex(
+      (floor) => floor.id === activeFloor.id,
+    )
+    const targetFloor =
+      normalized.floors[currentIndex + 1] ??
+      normalized.floors[currentIndex - 1]
 
     if (!targetFloor) {
-      setPlacementError(lang === 'de'
-        ? 'Lege zuerst eine zweite Etage an.'
-        : 'Create a second floor first.')
+      setPlacementError(
+        lang === 'de'
+          ? 'Lege zuerst eine zweite Etage an.'
+          : 'Create a second floor first.',
+      )
       return
     }
 
-    const occupied = new Set(
-      normalized.lifts
-        .filter((lift) => lift.fromFloorId === activeFloor.id || lift.toFloorId === activeFloor.id)
-        .map((lift) => `${lift.x},${lift.y}`),
-    )
-
-    let spot: { x: number; y: number } | null = null
-    for (let y = 0; y < GRID_H && !spot; y++) {
-      for (let x = 0; x < GRID_W; x++) {
-        if (!occupied.has(`${x},${y}`)) {
-          spot = { x, y }
-          break
-        }
-      }
-    }
-
-    if (!spot) return
-
     const lift: DesignerLift = {
       id: `lift-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      x: spot.x,
-      y: spot.y,
+      x: 0,
+      y: 0,
       fromFloorId: activeFloor.id,
       toFloorId: targetFloor.id,
     }
@@ -629,34 +854,15 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
       normalized.floors,
       [...normalized.lifts, lift],
     )
-    setPlacementError(null)
-  }
-
-  const removeLift = (id: string) => {
-    writeLayout(
-      normalized.nodes,
-      normalized.floors,
-      normalized.lifts.filter((lift) => lift.id !== id),
-    )
-  }
-
-  const stepForNode = (nodeId: string) => {
-    const node = normalized.nodes.find((entry) => entry.id === nodeId)
-    if (!node) return null
-    return steps.find(
-      (step) =>
-        step.item === node.itemId &&
-        step.recipe.producedIn === node.machineId,
-    ) ?? null
   }
 
   const flowForEndpoint = (
     endpoint: DesignerEndpoint,
     visited = new Set<string>(),
   ): number => {
-    const key = endpointKey(endpoint)
-    if (visited.has(key)) return 0
-    visited.add(key)
+    const objectKey = `${endpoint.kind}:${endpoint.id}`
+    if (visited.has(objectKey)) return 0
+    visited.add(objectKey)
 
     if (endpoint.kind === 'node') {
       return stepForNode(endpoint.id)?.actualOutputRate ?? 0
@@ -666,7 +872,9 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
     if (!utility) return 0
 
     const incoming = normalized.belts.filter(
-      (belt) => endpointKey(belt.to) === key,
+      (belt) =>
+        belt.to.kind === 'utility' &&
+        belt.to.id === utility.id,
     )
     const totalIn = incoming.reduce(
       (sum, belt) => sum + flowForEndpoint(belt.from, new Set(visited)),
@@ -677,14 +885,106 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
 
     const outgoingCount = Math.max(
       1,
-      normalized.belts.filter((belt) => endpointKey(belt.from) === key).length,
+      normalized.belts.filter(
+        (belt) =>
+          belt.from.kind === 'utility' &&
+          belt.from.id === utility.id,
+      ).length,
     )
     return totalIn / outgoingCount
   }
 
   const selected = normalized.nodes.find((node) => node.id === selectedId)
-  const selectedUtility = normalized.utilities.find((utility) => utility.id === selectedUtilityId)
+  const selectedUtility = normalized.utilities.find(
+    (utility) => utility.id === selectedUtilityId,
+  )
   const selectedFootprint = selected ? footprintFor(selected.machineId) : null
+
+  const renderPorts = (
+    endpointKind: DesignerEndpoint['kind'],
+    id: string,
+    rotation: DesignerNode['rotation'],
+    rectM: { left: number; top: number; right: number; bottom: number },
+  ) => {
+    const counts = portCounts({ kind: endpointKind, id })
+    const rectPx = {
+      left: rectM.left * PIXELS_PER_METER,
+      top: rectM.top * PIXELS_PER_METER,
+      right: rectM.right * PIXELS_PER_METER,
+      bottom: rectM.bottom * PIXELS_PER_METER,
+    }
+
+    return (
+      <>
+        {Array.from({ length: counts.input }).map((_, index) => {
+          const point = distributedPoint(
+            rectPx,
+            sideFor('input', rotation),
+            index,
+            counts.input,
+          )
+          return (
+            <button
+              key={`in-${index}`}
+              className="machine-port input-port"
+              style={{
+                left: point.x - rectPx.left - PORT_SIZE / 2,
+                top: point.y - rectPx.top - PORT_SIZE / 2,
+              }}
+              title={`Input ${index + 1}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                connectTo({
+                  kind: endpointKind,
+                  id,
+                  side: 'input',
+                  port: index,
+                })
+              }}
+            />
+          )
+        })}
+        {Array.from({ length: counts.output }).map((_, index) => {
+          const point = distributedPoint(
+            rectPx,
+            sideFor('output', rotation),
+            index,
+            counts.output,
+          )
+          const active =
+            connectFrom &&
+            endpointKey(connectFrom) ===
+              endpointKey({
+                kind: endpointKind,
+                id,
+                side: 'output',
+                port: index,
+              })
+
+          return (
+            <button
+              key={`out-${index}`}
+              className={`machine-port output-port ${active ? 'active' : ''}`}
+              style={{
+                left: point.x - rectPx.left - PORT_SIZE / 2,
+                top: point.y - rectPx.top - PORT_SIZE / 2,
+              }}
+              title={`Output ${index + 1}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                connectTo({
+                  kind: endpointKind,
+                  id,
+                  side: 'output',
+                  port: index,
+                })
+              }}
+            />
+          )
+        })}
+      </>
+    )
+  }
 
   return (
     <section className="designer-page">
@@ -699,7 +999,6 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
                 setSelectedId(null)
                 setSelectedUtilityId(null)
                 setConnectFrom(null)
-                setPlacementError(null)
               }}
             >
               <Layers3 size={14} />
@@ -713,7 +1012,11 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
             <Plus size={15} />
             {lang === 'de' ? 'Etage hinzufügen' : 'Add floor'}
           </button>
-          <button className="action-button danger" onClick={deleteFloor} disabled={normalized.floors.length <= 1}>
+          <button
+            className="action-button danger"
+            onClick={deleteFloor}
+            disabled={normalized.floors.length <= 1}
+          >
             <Trash2 size={15} />
             {lang === 'de' ? 'Etage löschen' : 'Delete floor'}
           </button>
@@ -724,8 +1027,14 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
         <aside className="designer-sidebar card">
           <div className="designer-sidebar-head">
             <div>
-              <span className="eyebrow">{lang === 'de' ? 'Maschinenpalette' : 'Machine palette'}</span>
-              <h2>{lang === 'de' ? 'Aktuelle Produktionskette' : 'Current production chain'}</h2>
+              <span className="eyebrow">
+                {lang === 'de' ? 'Maschinenpalette' : 'Machine palette'}
+              </span>
+              <h2>
+                {lang === 'de'
+                  ? 'Aktuelle Produktionskette'
+                  : 'Current production chain'}
+              </h2>
             </div>
             <button className="action-button primary" onClick={generateFromPlan}>
               <WandSparkles size={15} />
@@ -734,7 +1043,9 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
           </div>
 
           <div className="conveyor-tools">
-            <span className="eyebrow">{lang === 'de' ? 'Fördertechnik' : 'Conveyors'}</span>
+            <span className="eyebrow">
+              {lang === 'de' ? 'Fördertechnik' : 'Conveyors'}
+            </span>
             <div className="conveyor-tool-grid">
               <button className="action-button" onClick={() => addUtility('splitter')}>
                 <GitFork size={15} /> Splitter
@@ -748,16 +1059,26 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
             </div>
             <label>
               {lang === 'de' ? 'Neue Förderbänder' : 'New conveyor belts'}
-              <select value={defaultBeltTier} onChange={(e) => setDefaultBeltTier(e.target.value as BeltTier)}>
+              <select
+                value={defaultBeltTier}
+                onChange={(e) => setDefaultBeltTier(e.target.value as BeltTier)}
+              >
                 {(Object.keys(beltRates) as BeltTier[]).map((tier) => (
-                  <option key={tier} value={tier}>Mk.{tier.slice(2)} · {beltRates[tier]}/min</option>
+                  <option key={tier} value={tier}>
+                    Mk.{tier.slice(2)} · {beltRates[tier]}/min
+                  </option>
                 ))}
               </select>
             </label>
+
             {connectFrom && (
               <div className="connect-mode">
                 <Unplug size={15} />
-                <span>{lang === 'de' ? 'Quelle gewählt – jetzt Ziel anklicken.' : 'Source selected – now click a target.'}</span>
+                <span>
+                  {lang === 'de'
+                    ? 'Ausgang gewählt – jetzt einen grünen Eingangs-Port anklicken.'
+                    : 'Output selected – now click a green input port.'}
+                </span>
                 <button onClick={() => setConnectFrom(null)}>×</button>
               </div>
             )}
@@ -772,11 +1093,21 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
                   className="palette-item"
                   onClick={() => addNode(entry.machineId, entry.itemId)}
                 >
-                  <img src={machineIconUrl(entry.machineId) ?? ''} alt="" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                  <img
+                    src={machineIconUrl(entry.machineId) ?? ''}
+                    alt=""
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
                   <span>
                     <strong>{machineLabel(entry.machineId)}</strong>
-                    <small>{entry.count}× · {itemName(entry.itemId, lang)}</small>
-                    <small>{size.widthM} × {size.lengthM} m</small>
+                    <small>
+                      {entry.count}× · {itemName(entry.itemId, lang)}
+                    </small>
+                    <small>
+                      {size.widthM} × {size.lengthM} m
+                    </small>
                   </span>
                 </button>
               )
@@ -785,24 +1116,31 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
 
           {selected && selectedFootprint && (
             <div className="designer-inspector">
-              <span className="eyebrow">{lang === 'de' ? 'Ausgewählt' : 'Selected'}</span>
+              <span className="eyebrow">
+                {lang === 'de' ? 'Ausgewählt' : 'Selected'}
+              </span>
               <h3>{machineLabel(selected.machineId)}</h3>
               <p>{itemName(selected.itemId, lang)}</p>
               <div className="footprint-info">
-                <span>{lang === 'de' ? 'Grundfläche' : 'Footprint'}</span>
-                <strong>{selectedFootprint.widthM} × {selectedFootprint.lengthM} m</strong>
-                <small>{lang === 'de' ? 'Höhe' : 'Height'}: {selectedFootprint.heightM} m · {selected.rotation}°</small>
+                <span>{lang === 'de' ? 'Ports' : 'Ports'}</span>
+                <strong>
+                  {portCounts({ kind: 'node', id: selected.id }).input} Input ·{' '}
+                  {portCounts({ kind: 'node', id: selected.id }).output} Output
+                </strong>
+                <small>
+                  {selectedFootprint.widthM} × {selectedFootprint.lengthM} m ·{' '}
+                  {selected.rotation}°
+                </small>
               </div>
               <div className="inspector-actions">
-                <button className="action-button" onClick={() => connectTo({ kind: 'node', id: selected.id })}>
-                  <GitFork size={15} />
-                  {connectFrom ? (lang === 'de' ? 'Als Ziel verbinden' : 'Connect as target') : (lang === 'de' ? 'Verbindung starten' : 'Start connection')}
-                </button>
                 <button className="action-button" onClick={() => rotateNode(selected.id)}>
                   <RotateCw size={15} />
                   {lang === 'de' ? '90° drehen' : 'Rotate 90°'}
                 </button>
-                <button className="action-button danger" onClick={() => removeNode(selected.id)}>
+                <button
+                  className="action-button danger"
+                  onClick={() => removeNode(selected.id)}
+                >
                   <Trash2 size={15} />
                   {lang === 'de' ? 'Löschen' : 'Delete'}
                 </button>
@@ -812,15 +1150,29 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
 
           {selectedUtility && (
             <div className="designer-inspector">
-              <span className="eyebrow">{lang === 'de' ? 'Ausgewählt' : 'Selected'}</span>
-              <h3>{selectedUtility.kind === 'splitter' ? 'Splitter' : 'Merger'}</h3>
-              <p>4 × 4 m</p>
+              <span className="eyebrow">
+                {lang === 'de' ? 'Ausgewählt' : 'Selected'}
+              </span>
+              <h3>
+                {selectedUtility.kind === 'splitter' ? 'Splitter' : 'Merger'}
+              </h3>
+              <p>
+                {selectedUtility.kind === 'splitter'
+                  ? '1 Input · 3 Outputs'
+                  : '3 Inputs · 1 Output'}
+              </p>
               <div className="inspector-actions">
-                <button className="action-button" onClick={() => connectTo({ kind: 'utility', id: selectedUtility.id })}>
-                  <GitFork size={15} />
-                  {connectFrom ? (lang === 'de' ? 'Als Ziel verbinden' : 'Connect as target') : (lang === 'de' ? 'Verbindung starten' : 'Start connection')}
+                <button
+                  className="action-button"
+                  onClick={() => rotateUtility(selectedUtility.id)}
+                >
+                  <RotateCw size={15} />
+                  {lang === 'de' ? '90° drehen' : 'Rotate 90°'}
                 </button>
-                <button className="action-button danger" onClick={() => removeUtility(selectedUtility.id)}>
+                <button
+                  className="action-button danger"
+                  onClick={() => removeUtility(selectedUtility.id)}
+                >
                   <Trash2 size={15} />
                   {lang === 'de' ? 'Löschen' : 'Delete'}
                 </button>
@@ -830,18 +1182,34 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
 
           {activeBelts.length > 0 && (
             <div className="belt-list">
-              <span className="eyebrow">{lang === 'de' ? 'Förderbänder' : 'Conveyor belts'}</span>
+              <span className="eyebrow">
+                {lang === 'de' ? 'Förderbänder' : 'Conveyor belts'}
+              </span>
               {activeBelts.map((belt) => {
                 const flow = flowForEndpoint(belt.from)
                 const overloaded = flow > beltRates[belt.tier] + 0.001
                 return (
-                  <div className={`belt-list-item ${overloaded ? 'overloaded' : ''}`} key={belt.id}>
+                  <div
+                    className={`belt-list-item ${overloaded ? 'overloaded' : ''}`}
+                    key={belt.id}
+                  >
                     <div>
-                      <strong>Mk.{belt.tier.slice(2)} · {Math.round(flow * 100) / 100}/min</strong>
-                      <small>{lang === 'de' ? 'Kapazität' : 'Capacity'}: {beltRates[belt.tier]}/min</small>
+                      <strong>
+                        Mk.{belt.tier.slice(2)} ·{' '}
+                        {Math.round(flow * 100) / 100}/min
+                      </strong>
+                      <small>
+                        {lang === 'de' ? 'Kapazität' : 'Capacity'}:{' '}
+                        {beltRates[belt.tier]}/min
+                      </small>
                     </div>
                     {overloaded && <AlertTriangle size={14} />}
-                    <button className="icon-delete" onClick={() => removeBelt(belt.id)}><Trash2 size={14} /></button>
+                    <button
+                      className="icon-delete"
+                      onClick={() => removeBelt(belt.id)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 )
               })}
@@ -853,14 +1221,24 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
           <div className="designer-toolbar">
             <div>
               <span className="eyebrow">Factory Designer</span>
-              <h2>{activeFloor.name} · {activeFloor.elevationM} m</h2>
-              <small>{GRID_W} × {GRID_H} Foundations · {GRID_W * FOUNDATION_METERS} × {GRID_H * FOUNDATION_METERS} m</small>
+              <h2>
+                {activeFloor.name} · {activeFloor.elevationM} m
+              </h2>
+              <small>
+                {GRID_W} × {GRID_H} Foundations ·{' '}
+                {GRID_W * FOUNDATION_METERS} × {GRID_H * FOUNDATION_METERS} m
+              </small>
             </div>
-            <div className="designer-count">{activeNodes.length} {lang === 'de' ? 'Maschinen' : 'machines'}</div>
+            <div className="designer-count">
+              {activeNodes.length} {lang === 'de' ? 'Maschinen' : 'machines'}
+            </div>
           </div>
 
           {placementError && (
-            <div className="designer-error"><AlertTriangle size={16} />{placementError}</div>
+            <div className="designer-error">
+              <AlertTriangle size={16} />
+              {placementError}
+            </div>
           )}
 
           <div
@@ -877,7 +1255,9 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
             }}
             onDrop={(e) => {
               e.preventDefault()
-              const raw = e.dataTransfer.getData('application/x-satisfactory-object')
+              const raw = e.dataTransfer.getData(
+                'application/x-satisfactory-object',
+              )
               if (!raw) return
 
               const payload = JSON.parse(raw) as {
@@ -889,10 +1269,18 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
 
               const grid = e.currentTarget
               const rect = grid.getBoundingClientRect()
-              const leftPx = e.clientX - rect.left + grid.scrollLeft - payload.offsetX
-              const topPx = e.clientY - rect.top + grid.scrollTop - payload.offsetY
-              const x = Math.max(0, Math.min(GRID_W - 1, Math.round(leftPx / CELL_PX)))
-              const y = Math.max(0, Math.min(GRID_H - 1, Math.round(topPx / CELL_PX)))
+              const leftPx =
+                e.clientX - rect.left + grid.scrollLeft - payload.offsetX
+              const topPx =
+                e.clientY - rect.top + grid.scrollTop - payload.offsetY
+              const x = Math.max(
+                0,
+                Math.min(GRID_W - 1, Math.round(leftPx / CELL_PX)),
+              )
+              const y = Math.max(
+                0,
+                Math.min(GRID_H - 1, Math.round(topPx / CELL_PX)),
+              )
 
               if (payload.kind === 'node') moveNode(payload.id, x, y)
               else moveUtility(payload.id, x, y)
@@ -902,19 +1290,63 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
               <div key={index} className="foundation-cell" />
             ))}
 
-            <svg className="belt-overlay" width={GRID_W * CELL_PX} height={GRID_H * CELL_PX}>
+            <svg
+              className="belt-overlay"
+              width={GRID_W * CELL_PX}
+              height={GRID_H * CELL_PX}
+            >
+              <defs>
+                <marker
+                  id="belt-arrow"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <path d="M0,0 L8,4 L0,8 z" className="belt-arrow-head" />
+                </marker>
+                <marker
+                  id="belt-arrow-overloaded"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <path
+                    d="M0,0 L8,4 L0,8 z"
+                    className="belt-arrow-head overloaded"
+                  />
+                </marker>
+              </defs>
+
               {activeBelts.map((belt) => {
-                const from = objectCenterPx(belt.from)
-                const to = objectCenterPx(belt.to)
+                const from = portPoint(belt.from)
+                const to = portPoint(belt.to)
                 if (!from || !to) return null
                 const flow = flowForEndpoint(belt.from)
                 const overloaded = flow > beltRates[belt.tier] + 0.001
-                const midX = (from.x + to.x) / 2
-                const path = `M ${from.x} ${from.y} L ${midX} ${from.y} L ${midX} ${to.y} L ${to.x} ${to.y}`
+                const route = orthogonalPath(from, to)
+
                 return (
                   <g key={belt.id}>
-                    <path className={`belt-path ${overloaded ? 'overloaded' : ''}`} d={path} />
-                    <text className="belt-label" x={midX + 4} y={(from.y + to.y) / 2 - 4}>
+                    <path
+                      className={`belt-path ${overloaded ? 'overloaded' : ''}`}
+                      d={route.d}
+                      markerEnd={
+                        overloaded
+                          ? 'url(#belt-arrow-overloaded)'
+                          : 'url(#belt-arrow)'
+                      }
+                    />
+                    <text
+                      className="belt-label"
+                      x={route.labelX}
+                      y={route.labelY}
+                    >
                       Mk.{belt.tier.slice(2)}
                     </text>
                   </g>
@@ -935,60 +1367,78 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
               </div>
             ))}
 
-            {activeUtilities.map((utility) => (
-              <button
-                key={utility.id}
-                draggable
-                className={`factory-utility ${selectedUtilityId === utility.id ? 'selected' : ''} ${connectFrom && endpointKey(connectFrom) === endpointKey({ kind: 'utility', id: utility.id }) ? 'connecting' : ''}`}
-                style={{
-                  left: utility.x * CELL_PX,
-                  top: utility.y * CELL_PX,
-                  width: UTILITY_SIZE_M * PIXELS_PER_METER,
-                  height: UTILITY_SIZE_M * PIXELS_PER_METER,
-                }}
-                onDragStart={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  e.dataTransfer.effectAllowed = 'move'
-                  e.dataTransfer.setData('application/x-satisfactory-object', JSON.stringify({
-                    kind: 'utility',
-                    id: utility.id,
-                    offsetX: e.clientX - rect.left,
-                    offsetY: e.clientY - rect.top,
-                  }))
-                }}
-                onClick={() => {
-                  if (connectFrom) connectTo({ kind: 'utility', id: utility.id })
-                  setSelectedUtilityId(utility.id)
-                  setSelectedId(null)
-                }}
-              >
-                {utility.kind === 'splitter' ? <GitFork size={16} /> : <Merge size={16} />}
-              </button>
-            ))}
+            {activeUtilities.map((utility) => {
+              const rect = utilityRect(utility)
+              return (
+                <button
+                  key={utility.id}
+                  draggable
+                  className={`factory-utility ${selectedUtilityId === utility.id ? 'selected' : ''}`}
+                  style={{
+                    left: utility.x * CELL_PX,
+                    top: utility.y * CELL_PX,
+                    width: UTILITY_SIZE_M * PIXELS_PER_METER,
+                    height: UTILITY_SIZE_M * PIXELS_PER_METER,
+                  }}
+                  onDragStart={(e) => {
+                    const elementRect = e.currentTarget.getBoundingClientRect()
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData(
+                      'application/x-satisfactory-object',
+                      JSON.stringify({
+                        kind: 'utility',
+                        id: utility.id,
+                        offsetX: e.clientX - elementRect.left,
+                        offsetY: e.clientY - elementRect.top,
+                      }),
+                    )
+                  }}
+                  onClick={() => {
+                    setSelectedUtilityId(utility.id)
+                    setSelectedId(null)
+                  }}
+                >
+                  {utility.kind === 'splitter' ? (
+                    <GitFork size={16} />
+                  ) : (
+                    <Merge size={16} />
+                  )}
+                  {renderPorts(
+                    'utility',
+                    utility.id,
+                    utility.rotation,
+                    rect,
+                  )}
+                </button>
+              )
+            })}
 
             {activeNodes.map((node) => {
               const size = rotatedFootprint(node.machineId, node.rotation)
+              const rect = rectFor(node)
               return (
                 <button
                   key={node.id}
                   draggable
                   onDragStart={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect()
+                    const elementRect = e.currentTarget.getBoundingClientRect()
                     e.dataTransfer.effectAllowed = 'move'
-                    e.dataTransfer.setData('application/x-satisfactory-object', JSON.stringify({
-                      kind: 'node',
-                      id: node.id,
-                      offsetX: e.clientX - rect.left,
-                      offsetY: e.clientY - rect.top,
-                    }))
+                    e.dataTransfer.setData(
+                      'application/x-satisfactory-object',
+                      JSON.stringify({
+                        kind: 'node',
+                        id: node.id,
+                        offsetX: e.clientX - elementRect.left,
+                        offsetY: e.clientY - elementRect.top,
+                      }),
+                    )
                     setSelectedId(node.id)
                   }}
                   onClick={() => {
-                    if (connectFrom) connectTo({ kind: 'node', id: node.id })
                     setSelectedId(node.id)
                     setSelectedUtilityId(null)
                   }}
-                  className={`factory-node ${selectedId === node.id ? 'selected' : ''} ${connectFrom && endpointKey(connectFrom) === endpointKey({ kind: 'node', id: node.id }) ? 'connecting' : ''}`}
+                  className={`factory-node ${selectedId === node.id ? 'selected' : ''}`}
                   style={{
                     left: node.x * CELL_PX,
                     top: node.y * CELL_PX,
@@ -996,7 +1446,20 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
                     height: size.lengthM * PIXELS_PER_METER,
                   }}
                 >
-                  <img src={machineIconUrl(node.machineId) ?? ''} alt="" style={{ transform: `rotate(${node.rotation}deg)` }} onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                  <img
+                    src={machineIconUrl(node.machineId) ?? ''}
+                    alt=""
+                    style={{ transform: `rotate(${node.rotation}deg)` }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                  {renderPorts(
+                    'node',
+                    node.id,
+                    node.rotation,
+                    rect,
+                  )}
                 </button>
               )
             })}
