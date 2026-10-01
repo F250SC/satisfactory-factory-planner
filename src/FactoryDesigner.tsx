@@ -323,6 +323,7 @@ export default function FactoryDesigner({
   const [activeFloorId, setActiveFloorId] = useState(normalized.floors[0].id)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedUtilityId, setSelectedUtilityId] = useState<string | null>(null)
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
   const [selectedLiftId, setSelectedLiftId] = useState<string | null>(null)
   const [placementError, setPlacementError] = useState<string | null>(null)
   const [connectFrom, setConnectFrom] = useState<DesignerEndpoint | null>(null)
@@ -338,6 +339,7 @@ export default function FactoryDesigner({
       setActiveFloorId(normalized.floors[0].id)
       setSelectedId(null)
       setSelectedUtilityId(null)
+      setSelectedSourceId(null)
       setSelectedLiftId(null)
     }
   }, [layout, activeFloorId])
@@ -657,6 +659,53 @@ export default function FactoryDesigner({
     )
     setSelectedUtilityId(id)
     setSelectedId(null)
+    setPlacementError(null)
+  }
+
+  const moveSource = (id: string, x: number, y: number) => {
+    const source = normalized.sources.find((entry) => entry.id === id)
+    if (!source) return
+
+    const candidate = { ...source, x, y, floorId: activeFloor.id }
+    const rect = sourceRect(candidate)
+
+    const blocked =
+      rect.right > GRID_W * FOUNDATION_METERS ||
+      rect.bottom > GRID_H * FOUNDATION_METERS ||
+      normalized.nodes.some((node) =>
+        (node.floorId ?? normalized.floors[0].id) === activeFloor.id &&
+        overlaps(rect, rectFor(node))
+      ) ||
+      normalized.utilities.some((utility) =>
+        utility.floorId === activeFloor.id &&
+        overlaps(rect, utilityRect(utility))
+      ) ||
+      normalized.sources.some((entry) =>
+        entry.id !== id &&
+        entry.floorId === activeFloor.id &&
+        overlaps(rect, sourceRect(entry))
+      )
+
+    if (blocked) {
+      setPlacementError(
+        lang === 'de'
+          ? 'Dort ist kein freier Platz für die Mine.'
+          : 'There is no free space for the miner there.',
+      )
+      return
+    }
+
+    writeLayout(
+      normalized.nodes,
+      normalized.floors,
+      normalized.lifts,
+      normalized.utilities,
+      normalized.belts,
+      normalized.sources.map((entry) => entry.id === id ? candidate : entry),
+    )
+    setSelectedSourceId(id)
+    setSelectedId(null)
+    setSelectedUtilityId(null)
     setPlacementError(null)
   }
 
@@ -1220,6 +1269,9 @@ export default function FactoryDesigner({
     const remainingUtilities = normalized.utilities.filter(
       (utility) => utility.floorId !== floor.id,
     )
+    const remainingSources = normalized.sources.filter(
+      (source) => source.floorId !== floor.id,
+    )
     const remainingLifts = normalized.lifts.filter(
       (lift) =>
         lift.fromFloorId !== floor.id &&
@@ -1235,6 +1287,7 @@ export default function FactoryDesigner({
       remainingLifts,
       remainingUtilities,
       remainingBelts,
+      remainingSources,
     )
     setActiveFloorId(remainingFloors[0].id)
     setSelectedId(null)
@@ -1282,8 +1335,13 @@ export default function FactoryDesigner({
     if (visited.has(objectKey)) return 0
     visited.add(objectKey)
 
+    if (endpoint.kind === 'source') {
+      return normalized.sources.find((source) => source.id === endpoint.id)?.rate ?? 0
+    }
+
     if (endpoint.kind === 'node') {
-      return stepForNode(endpoint.id)?.actualOutputRate ?? 0
+      const step = stepForNode(endpoint.id)
+      return step ? step.actualOutputRate / Math.max(1, step.machines) : 0
     }
 
     const utility = normalized.utilities.find((entry) => entry.id === endpoint.id)
@@ -1637,6 +1695,19 @@ export default function FactoryDesigner({
             </div>
           )}
 
+          {selectedSourceId && (() => {
+            const source = normalized.sources.find((entry) => entry.id === selectedSourceId)
+            if (!source) return null
+            const meta = resourceMeta[source.resourceId]
+            return (
+              <div className="designer-inspector">
+                <span className="eyebrow">{lang === 'de' ? 'Rohstoffquelle' : 'Resource source'}</span>
+                <h3>{meta?.[lang] ?? itemName(source.resourceId, lang)}</h3>
+                <p>Miner Mk.{source.miner.slice(2)} · {Math.round(source.rate * 100) / 100}/min</p>
+              </div>
+            )
+          })()}
+
           {selectedUtility && (
             <div className="designer-inspector">
               <span className="eyebrow">
@@ -1766,7 +1837,7 @@ export default function FactoryDesigner({
               if (!raw) return
 
               const payload = JSON.parse(raw) as {
-                kind: 'node' | 'utility' | 'lift'
+                kind: 'node' | 'utility' | 'source' | 'lift'
                 id: string
                 offsetX: number
                 offsetY: number
@@ -1789,6 +1860,7 @@ export default function FactoryDesigner({
 
               if (payload.kind === 'node') moveNode(payload.id, x, y)
               else if (payload.kind === 'utility') moveUtility(payload.id, x, y)
+              else if (payload.kind === 'source') moveSource(payload.id, x, y)
               else moveLift(payload.id, x, y)
             }}
           >
@@ -1896,6 +1968,55 @@ export default function FactoryDesigner({
                 <ArrowDownUp size={16} />
               </button>
             ))}
+
+            {activeSources.map((source) => {
+              const rect = sourceRect(source)
+              const meta = resourceMeta[source.resourceId]
+              const label = meta?.[lang] ?? itemName(source.resourceId, lang)
+              return (
+                <button
+                  key={source.id}
+                  draggable
+                  className={`factory-source ${selectedSourceId === source.id ? 'selected' : ''}`}
+                  style={{
+                    left: source.x * CELL_PX,
+                    top: source.y * CELL_PX,
+                    width: CELL_PX,
+                    height: CELL_PX,
+                  }}
+                  title={`${label} · Miner Mk.${source.miner.slice(2)} · ${Math.round(source.rate * 100) / 100}/min`}
+                  onDragStart={(e) => {
+                    const elementRect = e.currentTarget.getBoundingClientRect()
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData(
+                      'application/x-satisfactory-object',
+                      JSON.stringify({
+                        kind: 'source',
+                        id: source.id,
+                        offsetX: e.clientX - elementRect.left,
+                        offsetY: e.clientY - elementRect.top,
+                      }),
+                    )
+                    setSelectedSourceId(source.id)
+                    setSelectedId(null)
+                    setSelectedUtilityId(null)
+                  }}
+                  onClick={() => {
+                    setSelectedSourceId(source.id)
+                    setSelectedId(null)
+                    setSelectedUtilityId(null)
+                  }}
+                >
+                  <img
+                    src={extractorIconUrl(meta?.kind ?? 'solid', source.miner) ?? ''}
+                    alt=""
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  />
+                  <small>{label}</small>
+                  {renderPorts('source', source.id, 0, rect)}
+                </button>
+              )
+            })}
 
             {activeUtilities.map((utility) => {
               const rect = utilityRect(utility)
