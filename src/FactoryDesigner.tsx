@@ -398,6 +398,7 @@ export default function FactoryDesigner({
   }
 
   const portCounts = (endpoint: DesignerEndpoint) => {
+    if (endpoint.kind === 'source') return { input: 0, output: 1 }
     if (endpoint.kind === 'utility') {
       const utility = normalized.utilities.find((entry) => entry.id === endpoint.id)
       if (!utility) return { input: 1, output: 1 }
@@ -420,6 +421,19 @@ export default function FactoryDesigner({
       0,
       Math.min((role === 'input' ? counts.input : counts.output) - 1, endpoint.port ?? 0),
     )
+
+    if (endpoint.kind === 'source') {
+      const source = normalized.sources.find((entry) => entry.id === endpoint.id)
+      if (!source) return null
+      const rect = sourceRect(source)
+      const rectPx = {
+        left: rect.left * PIXELS_PER_METER,
+        top: rect.top * PIXELS_PER_METER,
+        right: rect.right * PIXELS_PER_METER,
+        bottom: rect.bottom * PIXELS_PER_METER,
+      }
+      return distributedPoint(rectPx, 'right', 0, 1)
+    }
 
     if (endpoint.kind === 'node') {
       const node = normalized.nodes.find((entry) => entry.id === endpoint.id)
@@ -481,9 +495,14 @@ export default function FactoryDesigner({
     })
     if (machineCollision) return false
 
-    return !normalized.utilities.some((utility) => {
+    if (normalized.utilities.some((utility) => {
       if (utility.floorId !== candidate.floorId) return false
       return overlaps(rect, utilityRect(utility))
+    })) return false
+
+    return !normalized.sources.some((source) => {
+      if (source.floorId !== candidate.floorId) return false
+      return overlaps(rect, sourceRect(source))
     })
   }
 
@@ -500,9 +519,14 @@ export default function FactoryDesigner({
     })
     if (utilityCollision) return false
 
-    return !normalized.nodes.some((node) => {
+    if (normalized.nodes.some((node) => {
       if ((node.floorId ?? normalized.floors[0].id) !== candidate.floorId) return false
       return overlaps(rect, rectFor(node))
+    })) return false
+
+    return !normalized.sources.some((source) => {
+      if (source.floorId !== candidate.floorId) return false
+      return overlaps(rect, sourceRect(source))
     })
   }
 
