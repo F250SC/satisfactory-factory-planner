@@ -63,7 +63,11 @@ const ui = {
     extractorClock: 'Takt',
     extractorShards: 'Power Shards',
     lockedAt100: 'Noch nicht freigeschaltet → 100 %',
-    maxProduction: 'Maximale Produktion',
+    maxProduction: 'Praktisch baubare Produktion',
+    theoreticalMaximum: 'Theoretisches Rohstoffmaximum',
+    clockLimited: 'Ohne Taktung begrenzt',
+    clockLimitedHint: 'Das theoretische Maximum ist mit ganzen 100-%-Maschinen nicht dauerhaft voll versorgbar.',
+    intermediateSurplus: 'Überschuss',
     balanced: 'Ausgeglichen',
     surplus: 'Rohstoffüberschuss',
     limited: 'Transport-Limit',
@@ -108,7 +112,11 @@ const ui = {
     extractorClock: 'Clock speed',
     extractorShards: 'Power Shards',
     lockedAt100: 'Not researched yet → 100%',
-    maxProduction: 'Maximum production',
+    maxProduction: 'Practical buildable production',
+    theoreticalMaximum: 'Theoretical resource maximum',
+    clockLimited: 'Limited without clock control',
+    clockLimitedHint: 'The theoretical maximum cannot be continuously supplied using whole machines fixed at 100%.',
+    intermediateSurplus: 'Surplus',
     balanced: 'Balanced',
     surplus: 'Resource surplus',
     limited: 'Transport limit',
@@ -361,8 +369,21 @@ export default function App() {
 
   const hasTransportLimit = resourceRates.some(({ rate }) => rate.transportLimited)
   const hasSurplus = result.requiredResources.some((id) => (result.leftovers[id] ?? 0) > 0.01)
-  const status = hasTransportLimit ? t.limited : hasSurplus ? t.surplus : t.balanced
-  const statusClass = hasTransportLimit ? 'warning' : hasSurplus ? 'surplus' : ''
+  const hasIntermediateSurplus = result.machineSteps.some((step) => step.surplusRate > 0.01)
+  const status = hasTransportLimit
+    ? t.limited
+    : result.practicalClockLimited
+      ? t.clockLimited
+      : (hasSurplus || hasIntermediateSurplus)
+        ? t.surplus
+        : t.balanced
+  const statusClass = hasTransportLimit
+    ? 'warning'
+    : result.practicalClockLimited
+      ? 'clock-limited'
+      : (hasSurplus || hasIntermediateSurplus)
+        ? 'surplus'
+        : ''
 
   return (
     <main>
@@ -373,7 +394,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.4</div>
+          <div className="version">v0.5</div>
         </div>
       </header>
 
@@ -438,9 +459,24 @@ export default function App() {
 
         <section className="result-card">
           <div className="result-heading">
-            <div><span className="eyebrow">{t.maxProduction}</span><h2>{fmt(result.output)} {itemName(target, lang)} / min</h2></div>
+            <div>
+              <span className="eyebrow">{t.maxProduction}</span>
+              <h2>{fmt(result.output)} {itemName(target, lang)} / min</h2>
+              {!clockControlUnlocked && (
+                <div className="theoretical-line">
+                  <span>{t.theoreticalMaximum}</span>
+                  <strong>{fmt(result.theoreticalOutput)} {itemName(target, lang)} / min</strong>
+                </div>
+              )}
+            </div>
             <div className={`status ${statusClass}`}>{status}</div>
           </div>
+          {result.practicalClockLimited && (
+            <div className="clock-limit-note">
+              <AlertTriangle size={17} />
+              <span>{t.clockLimitedHint}</span>
+            </div>
+          )}
 
           <div className="summary-strip">
             {resourceRates.map(({ id, rate }) => (
@@ -455,7 +491,14 @@ export default function App() {
               <div className="machine-row" key={`${step.item}-${step.recipe.className}`}>
                 <div className="machine-product">
                   <ItemThumb id={step.item} alt={itemName(step.item, lang)} />
-                  <div><span>{itemName(step.item, lang)}</span><strong>{fmt(step.requiredRate)} / min</strong><small>{recipeName(step.recipe, lang)}</small></div>
+                  <div>
+                    <span>{itemName(step.item, lang)}</span>
+                    <strong>{fmt(step.actualOutputRate)} / min</strong>
+                    <small>{recipeName(step.recipe, lang)}</small>
+                    {step.surplusRate > 0.01 && (
+                      <small className="surplus-note">+ {fmt(step.surplusRate)} / min {t.intermediateSurplus}</small>
+                    )}
+                  </div>
                 </div>
                 <div className="machine-arrow">→</div>
                 <div className="machine-info">
