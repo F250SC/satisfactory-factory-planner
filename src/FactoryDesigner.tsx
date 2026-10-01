@@ -1865,6 +1865,21 @@ export default function FactoryDesigner({
   const selectedFootprint = selected ? footprintFor(selected.machineId) : null
   const selectedBelt = normalized.belts.find((belt) => belt.id === selectedBeltId) ?? null
 
+  const endpointLabel = (endpoint: DesignerEndpoint) => {
+    if (endpoint.kind === 'source') {
+      const source = normalized.sources.find((entry) => entry.id === endpoint.id)
+      if (!source) return 'Rohstoffquelle'
+      return resourceMeta[source.resourceId]?.[lang] ?? itemName(source.resourceId, lang)
+    }
+    if (endpoint.kind === 'node') {
+      const node = normalized.nodes.find((entry) => entry.id === endpoint.id)
+      if (!node) return 'Maschine'
+      return `${machineLabel(node.machineId)} · ${itemName(node.itemId, lang)}`
+    }
+    const utility = normalized.utilities.find((entry) => entry.id === endpoint.id)
+    return utility?.kind === 'splitter' ? 'Splitter' : 'Merger'
+  }
+
   const renderPorts = (
     endpointKind: DesignerEndpoint['kind'],
     id: string,
@@ -2088,6 +2103,7 @@ export default function FactoryDesigner({
                 setSelectedUtilityId(null)
                 setSelectedSourceId(null)
                 setSelectedLiftId(null)
+                setSelectedBeltId(null)
                 setConnectFrom(null)
               }}
             >
@@ -2356,7 +2372,7 @@ export default function FactoryDesigner({
                   {lang === 'de' ? 'überlastet' : 'overloaded'}
                 </small>
               </summary>
-              {activeBelts.map((belt) => {
+              {activeBelts.map((belt, beltIndex) => {
                 const flow = flowForEndpoint(belt.from)
                 const overloaded = flow > beltRates[belt.tier] + 0.001
                 return (
@@ -2490,10 +2506,12 @@ export default function FactoryDesigner({
               if (!raw) return
 
               const payload = JSON.parse(raw) as {
-                kind: 'node' | 'utility' | 'source' | 'lift'
+                kind: 'node' | 'utility' | 'source' | 'lift' | 'waypoint'
                 id: string
                 offsetX: number
                 offsetY: number
+                beltId?: string
+                waypointIndex?: number
               }
 
               const rect = e.currentTarget.getBoundingClientRect()
@@ -2501,6 +2519,20 @@ export default function FactoryDesigner({
                 (e.clientX - rect.left - pan.x - payload.offsetX) / zoom
               const worldTopPx =
                 (e.clientY - rect.top - pan.y - payload.offsetY) / zoom
+              if (
+                payload.kind === 'waypoint' &&
+                payload.beltId != null &&
+                payload.waypointIndex != null
+              ) {
+                moveBeltWaypoint(
+                  payload.beltId,
+                  payload.waypointIndex,
+                  worldLeftPx / PIXELS_PER_METER,
+                  worldTopPx / PIXELS_PER_METER,
+                )
+                return
+              }
+
               const x = Math.round(worldLeftPx / CELL_PX)
               const y = Math.round(worldTopPx / CELL_PX)
 
@@ -2524,25 +2556,25 @@ export default function FactoryDesigner({
               <defs>
                 <marker
                   id="belt-arrow"
-                  markerWidth="8"
-                  markerHeight="8"
-                  refX="7"
-                  refY="4"
+                  markerWidth="5"
+                  markerHeight="5"
+                  refX="5"
+                  refY="2.5"
                   orient="auto"
                   markerUnits="strokeWidth"
                 >
-                  <path d="M0,0 L8,4 L0,8 z" fill="context-stroke" />
+                  <path d="M0,0 L5,2.5 L0,5 z" fill="context-stroke" />
                 </marker>
                 <marker
                   id="belt-arrow-overloaded"
-                  markerWidth="8"
-                  markerHeight="8"
-                  refX="7"
-                  refY="4"
+                  markerWidth="5"
+                  markerHeight="5"
+                  refX="5"
+                  refY="2.5"
                   orient="auto"
                   markerUnits="strokeWidth"
                 >
-                  <path d="M0,0 L8,4 L0,8 z" fill="context-stroke" />
+                  <path d="M0,0 L5,2.5 L0,5 z" fill="context-stroke" />
                 </marker>
               </defs>
 
@@ -2552,12 +2584,34 @@ export default function FactoryDesigner({
                 if (!from || !to) return null
                 const flow = flowForEndpoint(belt.from)
                 const overloaded = flow > beltRates[belt.tier] + 0.001
-                const route = orthogonalPath(from, to)
+                const laneOffset = belt.waypoints?.length
+                  ? 0
+                  : ((beltIndex % 7) - 3) * 4
+                const route = routedPath(
+                  from,
+                  to,
+                  belt.waypoints,
+                  belt.routeStyle ?? 'orthogonal',
+                  laneOffset,
+                )
+                const selectedRoute = selectedBeltId === belt.id
 
                 return (
                   <g key={belt.id}>
                     <path
-                      className={`belt-path ${overloaded ? 'overloaded' : ''}`}
+                      className="belt-hit-path"
+                      d={route.d}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setSelectedBeltId(belt.id)
+                        setSelectedId(null)
+                        setSelectedUtilityId(null)
+                        setSelectedSourceId(null)
+                        setSelectedLiftId(null)
+                      }}
+                    />
+                    <path
+                      className={`belt-path ${overloaded ? 'overloaded' : ''} ${selectedRoute ? 'selected' : ''}`}
                       d={route.d}
                       style={{ stroke: materialColor(belt.materialId) }}
                       markerEnd={
@@ -2580,6 +2634,38 @@ export default function FactoryDesigner({
                 )
               })}
             </svg>
+
+            {selectedBelt?.waypoints?.map((waypoint, index) => (
+              <button
+                key={`waypoint-${selectedBelt.id}-${index}`}
+                draggable
+                className="belt-waypoint"
+                style={{
+                  left: waypoint.x * PIXELS_PER_METER - 7,
+                  top: waypoint.y * PIXELS_PER_METER - 7,
+                }}
+                title={lang === 'de' ? 'Belt-Wegpunkt verschieben' : 'Move belt waypoint'}
+                onDragStart={(e) => {
+                  const elementRect = e.currentTarget.getBoundingClientRect()
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData(
+                    'application/x-satisfactory-object',
+                    JSON.stringify({
+                      kind: 'waypoint',
+                      id: `${selectedBelt.id}-${index}`,
+                      beltId: selectedBelt.id,
+                      waypointIndex: index,
+                      offsetX: e.clientX - elementRect.left,
+                      offsetY: e.clientY - elementRect.top,
+                    }),
+                  )
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  removeBeltWaypoint(selectedBelt.id, index)
+                }}
+              />
+            ))}
 
             {floorLifts.map((lift) => (
               <button
