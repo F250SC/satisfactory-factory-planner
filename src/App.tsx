@@ -6,7 +6,10 @@ import {
   Gauge,
   Languages,
   Pickaxe,
+  Plus,
+  Save,
   Settings2,
+  Trash2,
   Zap,
 } from 'lucide-react'
 import {
@@ -43,6 +46,16 @@ import {
   eligibleAlternates,
   type ProgressionProfile,
 } from './progression'
+import {
+  formatProfileDate,
+  loadActiveProfileId,
+  loadProfiles,
+  makeProfile,
+  persistActiveProfileId,
+  persistProfiles,
+  type PlannerSnapshot,
+  type SavedProfile,
+} from './profiles'
 
 type Lang = 'de' | 'en'
 
@@ -55,6 +68,16 @@ const ui = {
     recipe: 'Zielrezept',
     progress: 'Fortschritt & Taktung',
     gameProgress: 'Mein Spielstand',
+    profiles: 'Spielstandsprofile',
+    profile: 'Aktives Profil',
+    noProfile: 'Nicht gespeichert',
+    newProfile: 'Neues Profil',
+    profilePlaceholder: 'z. B. Seb Hauptwelt',
+    createProfile: 'Profil anlegen',
+    saveProfile: 'Jetzt speichern',
+    deleteProfile: 'Profil löschen',
+    autosaved: 'Änderungen werden automatisch im Browser gespeichert.',
+    lastSaved: 'Zuletzt gespeichert',
     tier: 'Freigeschaltetes Tier',
     tierHint: 'Alle Meilensteine bis einschließlich dieses Tiers werden als abgeschlossen angenommen.',
     alternates: 'Freigeschaltete Alternate Recipes',
@@ -112,6 +135,16 @@ const ui = {
     recipe: 'Target recipe',
     progress: 'Progression & clock speed',
     gameProgress: 'My save progression',
+    profiles: 'Save profiles',
+    profile: 'Active profile',
+    noProfile: 'Not saved',
+    newProfile: 'New profile',
+    profilePlaceholder: 'e.g. Seb main world',
+    createProfile: 'Create profile',
+    saveProfile: 'Save now',
+    deleteProfile: 'Delete profile',
+    autosaved: 'Changes are automatically saved in this browser.',
+    lastSaved: 'Last saved',
     tier: 'Unlocked tier',
     tierHint: 'All milestones up to and including this tier are treated as completed.',
     alternates: 'Unlocked alternate recipes',
@@ -399,8 +432,94 @@ export default function App() {
   const [clockControlUnlocked, setClockControlUnlocked] = useState(false)
   const [productionShards, setProductionShards] = useState(0)
   const [resourceConfigs, setResourceConfigs] = useState<Record<string, ResourceConfig>>({})
+  const [profiles, setProfiles] = useState<SavedProfile[]>(() => loadProfiles())
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(() => loadActiveProfileId())
+  const [newProfileName, setNewProfileName] = useState('')
+  const [profileHydrated, setProfileHydrated] = useState(false)
 
   const t = ui[lang]
+
+  const currentSnapshot = (): PlannerSnapshot => ({
+    target,
+    overrides,
+    tier,
+    unlockedAlternates,
+    clockControlUnlocked,
+    productionShards,
+    resourceConfigs,
+  })
+
+  const applySnapshot = (snapshot: PlannerSnapshot) => {
+    setTarget(snapshot.target)
+    setOverrides(snapshot.overrides ?? {})
+    setTier(snapshot.tier ?? 0)
+    setUnlockedAlternates(snapshot.unlockedAlternates ?? [])
+    setClockControlUnlocked(Boolean(snapshot.clockControlUnlocked))
+    setProductionShards(snapshot.productionShards ?? 0)
+    setResourceConfigs(snapshot.resourceConfigs ?? {})
+  }
+
+  useEffect(() => {
+    if (profileHydrated) return
+    const stored = profiles.find((profile) => profile.id === activeProfileId)
+    if (stored) applySnapshot(stored.state)
+    else if (activeProfileId) setActiveProfileId(null)
+    setProfileHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    persistActiveProfileId(activeProfileId)
+  }, [activeProfileId])
+
+  useEffect(() => {
+    if (!profileHydrated || !activeProfileId) return
+    const updated = profiles.map((profile) => profile.id === activeProfileId
+      ? { ...profile, updatedAt: new Date().toISOString(), state: currentSnapshot() }
+      : profile)
+    setProfiles(updated)
+    persistProfiles(updated)
+  }, [target, overrides, tier, unlockedAlternates, clockControlUnlocked, productionShards, resourceConfigs, profileHydrated, activeProfileId])
+
+  const createProfile = () => {
+    const profile = makeProfile(newProfileName, currentSnapshot())
+    const updated = [...profiles, profile]
+    setProfiles(updated)
+    persistProfiles(updated)
+    setActiveProfileId(profile.id)
+    persistActiveProfileId(profile.id)
+    setNewProfileName('')
+  }
+
+  const selectProfile = (id: string) => {
+    const profile = profiles.find((entry) => entry.id === id)
+    if (!profile) {
+      setActiveProfileId(null)
+      return
+    }
+    applySnapshot(profile.state)
+    setActiveProfileId(profile.id)
+  }
+
+  const saveActiveProfile = () => {
+    if (!activeProfileId) return
+    const updated = profiles.map((profile) => profile.id === activeProfileId
+      ? { ...profile, updatedAt: new Date().toISOString(), state: currentSnapshot() }
+      : profile)
+    setProfiles(updated)
+    persistProfiles(updated)
+  }
+
+  const deleteActiveProfile = () => {
+    if (!activeProfileId) return
+    const updated = profiles.filter((profile) => profile.id !== activeProfileId)
+    setProfiles(updated)
+    persistProfiles(updated)
+    setActiveProfileId(null)
+    persistActiveProfileId(null)
+  }
+
+  const activeProfile = profiles.find((profile) => profile.id === activeProfileId)
+
   const progressionProfile = useMemo<ProgressionProfile>(() => ({ tier, unlockedAlternates }), [tier, unlockedAlternates])
   const unlockedTargets = useMemo(() => availableTargetItems(progressionProfile), [progressionProfile])
   const targetRecipes = useMemo(() => availableRecipesForProduct(target, progressionProfile), [target, progressionProfile])
@@ -509,7 +628,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.8</div>
+          <div className="version">v0.9</div>
         </div>
       </header>
 
@@ -540,6 +659,41 @@ export default function App() {
             <div className="recipe-chip">
               <MachineThumb id={selectedTargetRecipe.producedIn} alt={machineName(selectedTargetRecipe.producedIn, lang)} />
               {machineName(selectedTargetRecipe.producedIn, lang)}
+            </div>
+          )}
+        </section>
+
+        <section className="profiles-card card">
+          <div className="profiles-head">
+            <div>
+              <span className="eyebrow">{t.profiles}</span>
+              <h2>{activeProfile?.name ?? t.noProfile}</h2>
+              <p>{t.autosaved}</p>
+            </div>
+            {activeProfile && (
+              <div className="profile-meta">{t.lastSaved}: {formatProfileDate(activeProfile.updatedAt, lang)}</div>
+            )}
+          </div>
+          <div className="profiles-grid">
+            <label>
+              {t.profile}
+              <select value={activeProfileId ?? ''} onChange={(e) => selectProfile(e.target.value)}>
+                <option value="">{t.noProfile}</option>
+                {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+              </select>
+            </label>
+            <div className="new-profile-row">
+              <label>
+                {t.newProfile}
+                <input value={newProfileName} placeholder={t.profilePlaceholder} onChange={(e) => setNewProfileName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') createProfile() }} />
+              </label>
+              <button className="action-button primary" onClick={createProfile}><Plus size={15} />{t.createProfile}</button>
+            </div>
+          </div>
+          {activeProfile && (
+            <div className="profile-actions">
+              <button className="action-button" onClick={saveActiveProfile}><Save size={15} />{t.saveProfile}</button>
+              <button className="action-button danger" onClick={deleteActiveProfile}><Trash2 size={15} />{t.deleteProfile}</button>
             </div>
           )}
         </section>
