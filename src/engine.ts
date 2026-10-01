@@ -38,6 +38,8 @@ export interface MachineStep {
   item: string
   recipe: GameRecipe
   requiredRate: number
+  actualOutputRate: number
+  surplusRate: number
   exactMachinesAt100: number
   machines: number
   clocks: number[]
@@ -78,14 +80,19 @@ export function resourceOutput(
     return { extracted: manual, available: manual, transportLimited: false, unit: 'items' }
   }
 
-  const maxClock = clockControlUnlocked ? 100 + Math.max(0, Math.min(3, config.shards)) * 50 : 100
+  const maxClock = clockControlUnlocked
+    ? 100 + Math.max(0, Math.min(3, config.shards)) * 50
+    : 100
   const effectiveClock = clockControlUnlocked
     ? Math.max(1, Math.min(maxClock, config.clockSpeed || 100))
     : 100
   const clockFactor = effectiveClock / 100
 
   if (meta.kind === 'solid') {
-    const perNode = baseMinerRates[config.miner] * purityMultiplier[config.purity] * clockFactor
+    const perNode =
+      baseMinerRates[config.miner] *
+      purityMultiplier[config.purity] *
+      clockFactor
     const perNodeAvailable = Math.min(perNode, beltRates[config.belt])
     return {
       extracted: perNode * count,
@@ -96,7 +103,7 @@ export function resourceOutput(
   }
 
   if (meta.kind === 'oil') {
-    const perExtractor = 120 * clockFactor * purityMultiplier[config.purity] * clockFactor
+    const perExtractor = 120 * purityMultiplier[config.purity] * clockFactor
     const perExtractorAvailable = Math.min(perExtractor, pipeRates[config.pipe])
     return {
       extracted: perExtractor * count,
@@ -107,7 +114,7 @@ export function resourceOutput(
   }
 
   if (meta.kind === 'water') {
-    const perExtractor = 120
+    const perExtractor = 120 * clockFactor
     const perExtractorAvailable = Math.min(perExtractor, pipeRates[config.pipe])
     return {
       extracted: perExtractor * count,
@@ -139,8 +146,6 @@ function rawRequirementPerUnit(
   }
 
   if (stack.includes(itemId)) {
-    // Packaging/unpackaging and by-product recipe combinations can form cycles.
-    // Treat the repeated item as an external requirement instead of crashing the planner.
     return { [itemId]: 1 }
   }
 
@@ -208,14 +213,8 @@ function collectMachineRates(
 
 function clockPlan(
   exactMachinesAt100: number,
-  clockControlUnlocked: boolean,
   productionShards: number,
 ) {
-  if (!clockControlUnlocked) {
-    const machines = Math.max(1, Math.ceil(exactMachinesAt100))
-    return { machines, clocks: Array.from({ length: machines }, () => 100) }
-  }
-
   const maxClock = 100 + Math.max(0, Math.min(3, productionShards)) * 50
   const capacityPerMachine = maxClock / 100
   const machines = Math.max(1, Math.ceil(exactMachinesAt100 / capacityPerMachine))
@@ -249,6 +248,145 @@ function machinePower(recipe: GameRecipe, clocks: number[]) {
   )
 }
 
+interface LockedPlan {
+  feasible: boolean
+  output: number
+  rawUsed: Record<string, number>
+  machineSteps: MachineStep[]
+}
+
+/**
+ * Build a continuously supplied plan with every production machine fixed at 100%.
+ * Upstream machines are rounded up to whole machines and therefore may create
+ * intermediate surplus. Their FULL 100% input consumption is propagated upstream.
+ */
+function buildLockedPlan(
+  targetItem: string,
+  targetMachines: number,
+  availability: Record<string, number>,
+  overrides: RecipeOverrides,
+): LockedPlan {
+  const targetRecipe = selectedRecipe(targetItem, overrides)
+  if (!targetRecipe || targetMachines < 1) {
+    return { feasible: false, output: 0, rawUsed: {}, machineSteps: [] }
+  }
+
+  const targetPerMachine = outputRate(targetRecipe, targetItem)
+  if (targetPerMachine <= 0) {
+    return { feasible: false, output: 0, rawUsed: {}, machineSteps: [] }
+  }
+
+  const demands = new Map<string, number>()
+  const queue: string[] = [targetItem]
+  const queued = new Set<string>([targetItem])
+  const machineState = new Map<string, {
+    item: string
+    recipe: GameRecipe
+    demand: number
+    machines: number
+    actualOutput: number
+  }>()
+  const edgeContributions = new Map<string, number>()
+
+  demands.set(targetItem, targetMachines * targetPerMachine)
+
+  let iterations = 0
+  while (queue.length > 0 && iterations < 2000) {
+    iterations += 1
+    const itemId = queue.shift()!
+    queued.delete(itemId)
+
+    const hasOverride = Boolean(overrides[itemId])
+    if (rawResources.includes(itemId) && !hasOverride) continue
+
+    const recipe = selectedRecipe(itemId, overrides)
+    if (!recipe) continue
+
+    const perMachine = outputRate(recipe, itemId)
+    if (perMachine <= 0) continue
+
+    const demand = demands.get(itemId) ?? 0
+    const machines =
+      itemId === targetItem
+        ? targetMachines
+        : Math.max(1, Math.ceil((demand - 1e-9) / perMachine))
+    const actualOutput = machines * perMachine
+
+    machineState.set(itemId, {
+      item: itemId,
+      recipe,
+      demand,
+      machines,
+      actualOutput,
+    })
+
+    const parentKey = `${itemId}::${recipe.className}`
+
+    for (const ingredient of recipe.ingredients) {
+      const contribution = machines * ingredientRate(recipe, ingredient.amount)
+      const edgeKey = `${parentKey}->${ingredient.item}`
+      const previous = edgeContributions.get(edgeKey) ?? 0
+      const delta = contribution - previous
+
+      if (Math.abs(delta) < 1e-9) continue
+
+      edgeContributions.set(edgeKey, contribution)
+      demands.set(
+        ingredient.item,
+        Math.max(0, (demands.get(ingredient.item) ?? 0) + delta),
+      )
+
+      if (!queued.has(ingredient.item)) {
+        queue.push(ingredient.item)
+        queued.add(ingredient.item)
+      }
+    }
+  }
+
+  if (iterations >= 2000) {
+    return { feasible: false, output: 0, rawUsed: {}, machineSteps: [] }
+  }
+
+  const rawUsed: Record<string, number> = {}
+  for (const [itemId, demand] of demands.entries()) {
+    const hasOverride = Boolean(overrides[itemId])
+    const recipe = selectedRecipe(itemId, overrides)
+    const terminal =
+      (rawResources.includes(itemId) && !hasOverride) ||
+      !recipe
+
+    if (terminal) {
+      rawUsed[itemId] = demand
+    }
+  }
+
+  const feasible = Object.entries(rawUsed).every(
+    ([resource, demand]) => demand <= (availability[resource] ?? 0) + 1e-6,
+  )
+
+  const machineSteps: MachineStep[] = Array.from(machineState.values()).map((state) => {
+    const clocks = Array.from({ length: state.machines }, () => 100)
+    return {
+      item: state.item,
+      recipe: state.recipe,
+      requiredRate: state.demand,
+      actualOutputRate: state.actualOutput,
+      surplusRate: Math.max(0, state.actualOutput - state.demand),
+      exactMachinesAt100: state.demand / outputRate(state.recipe, state.item),
+      machines: state.machines,
+      clocks,
+      totalPowerMW: machinePower(state.recipe, clocks),
+    }
+  })
+
+  return {
+    feasible,
+    output: targetMachines * targetPerMachine,
+    rawUsed,
+    machineSteps,
+  }
+}
+
 export function calculateProduction(
   targetItem: string,
   availability: Record<string, number>,
@@ -264,44 +402,109 @@ export function calculateProduction(
     return available / requirement
   })
 
-  const output =
+  const theoreticalOutput =
     possibleRates.length > 0 && possibleRates.every(Number.isFinite)
       ? Math.max(0, Math.min(...possibleRates))
       : 0
+
+  if (!clockControlUnlocked) {
+    const targetRecipe = selectedRecipe(targetItem, overrides)
+    const targetPerMachine = targetRecipe ? outputRate(targetRecipe, targetItem) : 0
+    const maxTargetMachines =
+      targetPerMachine > 0
+        ? Math.max(0, Math.floor((theoreticalOutput + 1e-6) / targetPerMachine))
+        : 0
+
+    let lockedPlan: LockedPlan = {
+      feasible: false,
+      output: 0,
+      rawUsed: {},
+      machineSteps: [],
+    }
+
+    for (let machines = maxTargetMachines; machines >= 1; machines -= 1) {
+      const candidate = buildLockedPlan(
+        targetItem,
+        machines,
+        availability,
+        overrides,
+      )
+      if (candidate.feasible) {
+        lockedPlan = candidate
+        break
+      }
+    }
+
+    const rawUsed: Record<string, number> = {}
+    const leftovers: Record<string, number> = {}
+
+    for (const [resource] of rawEntries) {
+      const used = lockedPlan.rawUsed[resource] ?? 0
+      rawUsed[resource] = used
+      leftovers[resource] = Math.max(0, (availability[resource] ?? 0) - used)
+    }
+
+    return {
+      output: lockedPlan.output,
+      theoreticalOutput,
+      practicalClockLimited: lockedPlan.output + 1e-6 < theoreticalOutput,
+      rawPerUnit,
+      rawUsed,
+      leftovers,
+      requiredResources: rawEntries.map(([resource]) => resource),
+      machineSteps: lockedPlan.machineSteps,
+      totalPowerMW: lockedPlan.machineSteps.reduce(
+        (sum, step) => sum + step.totalPowerMW,
+        0,
+      ),
+    }
+  }
 
   const rawUsed: Record<string, number> = {}
   const leftovers: Record<string, number> = {}
 
   for (const [resource, requirement] of rawEntries) {
-    rawUsed[resource] = output * requirement
-    leftovers[resource] = Math.max(0, (availability[resource] ?? 0) - rawUsed[resource])
+    rawUsed[resource] = theoreticalOutput * requirement
+    leftovers[resource] = Math.max(
+      0,
+      (availability[resource] ?? 0) - rawUsed[resource],
+    )
   }
 
   const collected = new Map<string, { item: string; recipe: GameRecipe; rate: number }>()
-  collectMachineRates(targetItem, output, overrides, collected)
+  collectMachineRates(targetItem, theoreticalOutput, overrides, collected)
 
-  const machineSteps: MachineStep[] = Array.from(collected.values()).map(({ item, recipe, rate }) => {
-    const perMachine = outputRate(recipe, item)
-    const exactMachinesAt100 = perMachine > 0 ? rate / perMachine : 0
-    const { machines, clocks } = clockPlan(
-      exactMachinesAt100,
-      clockControlUnlocked,
-      productionShards,
-    )
+  const machineSteps: MachineStep[] = Array.from(collected.values()).map(
+    ({ item, recipe, rate }) => {
+      const perMachine = outputRate(recipe, item)
+      const exactMachinesAt100 = perMachine > 0 ? rate / perMachine : 0
+      const { machines, clocks } = clockPlan(
+        exactMachinesAt100,
+        productionShards,
+      )
+      const actualOutputRate = clocks.reduce(
+        (sum, clock) => sum + perMachine * (clock / 100),
+        0,
+      )
 
-    return {
-      item,
-      recipe,
-      requiredRate: rate,
-      exactMachinesAt100,
-      machines,
-      clocks,
-      totalPowerMW: machinePower(recipe, clocks),
-    }
-  })
+      return {
+        item,
+        recipe,
+        requiredRate: rate,
+        actualOutputRate,
+        surplusRate: Math.max(0, actualOutputRate - rate),
+        exactMachinesAt100,
+        machines,
+        clocks,
+        totalPowerMW: machinePower(recipe, clocks),
+      }
+    },
+  )
 
   return {
-    output,
+    output: theoreticalOutput,
+    theoreticalOutput,
+    practicalClockLimited: false,
     rawPerUnit,
     rawUsed,
     leftovers,
