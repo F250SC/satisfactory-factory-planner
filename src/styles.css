@@ -898,3 +898,118 @@ select:focus, input:focus { border-color: #f28c28; }
   margin-top: 5px;
   color: #74808d;
 }
+
+
+/* v0.12 multi-floor planning */
+.designer-page {
+  display: grid;
+  gap: 14px;
+}
+.floor-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px;
+  border: 1px solid #2d3743;
+  border-radius: 12px;
+  background: #10161d;
+}
+.floor-tab-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.floor-tab-list button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid #33404d;
+  border-radius: 9px;
+  background: #111820;
+  color: #93a0ae;
+}
+.floor-tab-list button span,
+.floor-tab-list button small {
+  display: block;
+}
+.floor-tab-list button small {
+  color: #6e7b89;
+}
+.floor-tab-list button.active {
+  border-color: #f28c28;
+  background: #2b1d10;
+  color: #f7c087;
+}
+.floor-actions {
+  display: flex;
+  gap: 8px;
+}
+.action-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.lift-list {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #2b3440;
+  display: grid;
+  gap: 8px;
+}
+.lift-list-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 9px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid #2f3946;
+  border-radius: 9px;
+  background: #10161d;
+}
+.lift-list-item > svg {
+  color: #f2a34a;
+}
+.lift-list-item strong,
+.lift-list-item small {
+  display: block;
+}
+.lift-list-item small {
+  margin-top: 2px;
+  color: #74808d;
+}
+.icon-delete {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #5f3434;
+  border-radius: 8px;
+  background: transparent;
+  color: #db8e8e;
+}
+.factory-lift {
+  position: absolute;
+  z-index: 4;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #6f5b24;
+  border-radius: 6px;
+  background: #33280f;
+  color: #f2c14e;
+  box-shadow: 0 0 0 2px rgba(242,193,78,.12);
+}
+@media (max-width: 900px) {
+  .floor-tabs {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .floor-actions {
+    width: 100%;
+  }
+  .floor-actions .action-button {
+    flex: 1;
+  }
+}
