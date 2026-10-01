@@ -87,6 +87,7 @@ export interface DesignerBelt {
   from: DesignerEndpoint
   to: DesignerEndpoint
   tier: BeltTier
+  materialId?: string
 }
 
 export interface DesignerLayout {
@@ -240,6 +241,51 @@ function sideFor(
   return role === 'input'
     ? inputByRotation[rotation]
     : outputByRotation[rotation]
+}
+
+function rotateSide(side: Side, rotation: 0 | 90 | 180 | 270): Side {
+  const order: Side[] = ['top', 'right', 'bottom', 'left']
+  const index = order.indexOf(side)
+  const steps = rotation / 90
+  return order[(index + steps) % 4]
+}
+
+function utilityPortSide(
+  kind: DesignerUtility['kind'],
+  role: 'input' | 'output',
+  index: number,
+  rotation: DesignerUtility['rotation'],
+): Side {
+  const base: Side =
+    kind === 'splitter'
+      ? role === 'input'
+        ? 'left'
+        : (['top', 'right', 'bottom'] as Side[])[index] ?? 'right'
+      : role === 'output'
+        ? 'right'
+        : (['top', 'left', 'bottom'] as Side[])[index] ?? 'left'
+
+  return rotateSide(base, rotation)
+}
+
+function materialColor(materialId?: string) {
+  if (!materialId) return 'hsl(32 85% 55%)'
+  let hash = 0
+  for (let i = 0; i < materialId.length; i += 1) {
+    hash = ((hash << 5) - hash + materialId.charCodeAt(i)) | 0
+  }
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue} 72% 58%)`
+}
+
+function sideCenterPoint(
+  rectPx: { left: number; top: number; right: number; bottom: number },
+  side: Side,
+): PortPoint {
+  if (side === 'left') return { x: rectPx.left, y: (rectPx.top + rectPx.bottom) / 2, side }
+  if (side === 'right') return { x: rectPx.right, y: (rectPx.top + rectPx.bottom) / 2, side }
+  if (side === 'top') return { x: (rectPx.left + rectPx.right) / 2, y: rectPx.top, side }
+  return { x: (rectPx.left + rectPx.right) / 2, y: rectPx.bottom, side }
 }
 
 function distributedPoint(
@@ -476,13 +522,13 @@ export default function FactoryDesigner({
       right: rect.right * PIXELS_PER_METER,
       bottom: rect.bottom * PIXELS_PER_METER,
     }
-    const side = sideFor(role, utility.rotation)
-    return distributedPoint(
-      rectPx,
-      side,
+    const side = utilityPortSide(
+      utility.kind,
+      role,
       portIndex,
-      role === 'input' ? counts.input : counts.output,
+      utility.rotation,
     )
+    return sideCenterPoint(rectPx, side)
   }
 
   const fits = (
@@ -811,6 +857,35 @@ export default function FactoryDesigner({
     setPlacementError(null)
   }
 
+  const materialForEndpoint = (
+    endpoint: DesignerEndpoint,
+    visited = new Set<string>(),
+  ): string | undefined => {
+    const key = `${endpoint.kind}:${endpoint.id}`
+    if (visited.has(key)) return undefined
+    visited.add(key)
+
+    if (endpoint.kind === 'source') {
+      return normalized.sources.find((source) => source.id === endpoint.id)?.resourceId
+    }
+
+    if (endpoint.kind === 'node') {
+      const node = normalized.nodes.find((entry) => entry.id === endpoint.id)
+      if (!node) return undefined
+      if ((endpoint.side ?? 'output') === 'output') return node.itemId
+
+      const step = stepForNode(endpoint.id)
+      return step?.recipe.ingredients[endpoint.port ?? 0]?.item
+    }
+
+    const incoming = normalized.belts.find(
+      (belt) => belt.to.kind === 'utility' && belt.to.id === endpoint.id,
+    )
+    if (incoming?.materialId) return incoming.materialId
+    if (incoming) return materialForEndpoint(incoming.from, visited)
+    return undefined
+  }
+
   const connectTo = (target: DesignerEndpoint) => {
     const normalizedTarget = normalizeEndpoint(
       target,
@@ -878,6 +953,7 @@ export default function FactoryDesigner({
       from: connectFrom,
       to: normalizedTarget,
       tier: defaultBeltTier,
+      materialId: materialForEndpoint(connectFrom),
     }
 
     writeLayout(
@@ -1091,6 +1167,7 @@ export default function FactoryDesigner({
       from: DesignerEndpoint,
       to: DesignerEndpoint,
       rate: number,
+      materialId: string,
     ) => {
       generatedBelts.push({
         id: `auto-belt-${generatedBelts.length}-${Date.now()}`,
@@ -1098,12 +1175,14 @@ export default function FactoryDesigner({
         from,
         to,
         tier: beltTierFor(rate),
+        materialId,
       })
     }
 
     const combine = (
       producers: DesignerEndpoint[],
       rate: number,
+      materialId: string,
     ): DesignerEndpoint | null => {
       let current = [...producers]
       while (current.length > 1) {
@@ -1121,6 +1200,7 @@ export default function FactoryDesigner({
               endpoint,
               { kind: 'utility', id: merger.id, side: 'input', port },
               rate / Math.max(1, producers.length),
+              materialId,
             ),
           )
           next.push({ kind: 'utility', id: merger.id, side: 'output', port: 0 })
@@ -1134,10 +1214,11 @@ export default function FactoryDesigner({
       source: DesignerEndpoint,
       consumers: DesignerEndpoint[],
       totalRate: number,
+      materialId: string,
     ) => {
       if (consumers.length === 0) return
       if (consumers.length === 1) {
-        addBelt(source, consumers[0], totalRate)
+        addBelt(source, consumers[0], totalRate, materialId)
         return
       }
 
@@ -1153,6 +1234,7 @@ export default function FactoryDesigner({
         source,
         { kind: 'utility', id: splitter.id, side: 'input', port: 0 },
         totalRate,
+        materialId,
       )
 
       if (consumers.length <= 3) {
@@ -1161,6 +1243,7 @@ export default function FactoryDesigner({
             { kind: 'utility', id: splitter.id, side: 'output', port },
             consumer,
             totalRate / consumers.length,
+            materialId,
           ),
         )
         return
@@ -1170,16 +1253,19 @@ export default function FactoryDesigner({
         { kind: 'utility', id: splitter.id, side: 'output', port: 0 },
         consumers[0],
         totalRate / consumers.length,
+        materialId,
       )
       addBelt(
         { kind: 'utility', id: splitter.id, side: 'output', port: 1 },
         consumers[1],
         totalRate / consumers.length,
+        materialId,
       )
       distribute(
         { kind: 'utility', id: splitter.id, side: 'output', port: 2 },
         consumers.slice(2),
         totalRate * ((consumers.length - 2) / consumers.length),
+        materialId,
       )
     }
 
@@ -1223,8 +1309,8 @@ export default function FactoryDesigner({
       const producers = producersByItem.get(itemId) ?? []
       if (!producers.length || !consumers.length) continue
       const rate = rateForItem(itemId)
-      const combined = combine(producers, rate)
-      if (combined) distribute(combined, consumers, rate)
+      const combined = combine(producers, rate, itemId)
+      if (combined) distribute(combined, consumers, rate, itemId)
     }
 
     writeLayout(
@@ -1393,12 +1479,20 @@ export default function FactoryDesigner({
     return (
       <>
         {Array.from({ length: counts.input }).map((_, index) => {
-          const point = distributedPoint(
-            rectPx,
-            sideFor('input', rotation),
-            index,
-            counts.input,
-          )
+          const utility = endpointKind === 'utility'
+            ? normalized.utilities.find((entry) => entry.id === id)
+            : undefined
+          const point = utility
+            ? sideCenterPoint(
+                rectPx,
+                utilityPortSide(utility.kind, 'input', index, rotation),
+              )
+            : distributedPoint(
+                rectPx,
+                sideFor('input', rotation),
+                index,
+                counts.input,
+              )
           return (
             <i
               key={`in-${index}`}
@@ -1435,12 +1529,20 @@ export default function FactoryDesigner({
           )
         })}
         {Array.from({ length: counts.output }).map((_, index) => {
-          const point = distributedPoint(
-            rectPx,
-            sideFor('output', rotation),
-            index,
-            counts.output,
-          )
+          const utility = endpointKind === 'utility'
+            ? normalized.utilities.find((entry) => entry.id === id)
+            : undefined
+          const point = utility
+            ? sideCenterPoint(
+                rectPx,
+                utilityPortSide(utility.kind, 'output', index, rotation),
+              )
+            : distributedPoint(
+                rectPx,
+                sideFor('output', rotation),
+                index,
+                counts.output,
+              )
           const active =
             connectFrom &&
             endpointKey(connectFrom) ===
@@ -2050,6 +2152,7 @@ export default function FactoryDesigner({
                     <path
                       className={`belt-path ${overloaded ? 'overloaded' : ''}`}
                       d={route.d}
+                      style={{ stroke: materialColor(belt.materialId) }}
                       markerEnd={
                         overloaded
                           ? 'url(#belt-arrow-overloaded)'
@@ -2061,6 +2164,9 @@ export default function FactoryDesigner({
                       x={route.labelX}
                       y={route.labelY}
                     >
+                      {belt.materialId
+                        ? `${itemName(belt.materialId, lang)} · `
+                        : ''}
                       Mk.{belt.tier.slice(2)}
                     </text>
                   </g>
