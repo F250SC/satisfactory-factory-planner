@@ -1221,3 +1221,14 @@ select:focus, input:focus { border-color: #f28c28; }
 .factory-grid:has(.factory-node) .machine-port {
   opacity: 1;
 }
+
+
+/* v0.14.4 fix hidden conveyor ports */
+.factory-node .machine-port,
+.factory-utility .machine-port {
+  display: block !important;
+  position: absolute !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto;
+}
