@@ -188,6 +188,23 @@ function initialConfig(): ResourceConfig {
   }
 }
 
+function configForTier(config: ResourceConfig, tier: number): ResourceConfig {
+  const maxMiner: MinerTier = tier >= 8 ? 'mk3' : tier >= 4 ? 'mk2' : 'mk1'
+  const maxBelt: BeltTier = tier >= 9 ? 'mk6' : tier >= 7 ? 'mk5' : tier >= 5 ? 'mk4' : tier >= 4 ? 'mk3' : tier >= 2 ? 'mk2' : 'mk1'
+  const maxPipe: PipeTier = tier >= 6 ? 'mk2' : 'mk1'
+
+  const minerRank: Record<MinerTier, number> = { mk1: 1, mk2: 2, mk3: 3 }
+  const beltRank: Record<BeltTier, number> = { mk1: 1, mk2: 2, mk3: 3, mk4: 4, mk5: 5, mk6: 6 }
+  const pipeRank: Record<PipeTier, number> = { mk1: 1, mk2: 2 }
+
+  return {
+    ...config,
+    miner: minerRank[config.miner] > minerRank[maxMiner] ? maxMiner : config.miner,
+    belt: beltRank[config.belt] > beltRank[maxBelt] ? maxBelt : config.belt,
+    pipe: pipeRank[config.pipe] > pipeRank[maxPipe] ? maxPipe : config.pipe,
+  }
+}
+
 function displayResourceName(id: string, lang: Lang) {
   return resourceMeta[id]?.[lang] ?? itemName(id, lang)
 }
@@ -238,9 +255,10 @@ function ResourceCard({
 }) {
   const t = ui[lang]
   const meta = resourceMeta[resourceId]
-  const rate = resourceOutput(resourceId, config, clockControlUnlocked)
+  const safeConfig = configForTier(config, tier)
+  const rate = resourceOutput(resourceId, safeConfig, clockControlUnlocked)
   const isManual = !meta
-  const maxClock = 100 + config.shards * 50
+  const maxClock = 100 + safeConfig.shards * 50
   const minerOptions: MinerTier[] = tier >= 8 ? ['mk1','mk2','mk3'] : tier >= 4 ? ['mk1','mk2'] : ['mk1']
   const beltOptions: BeltTier[] = tier >= 7
     ? ['mk1','mk2','mk3','mk4','mk5']
@@ -278,7 +296,7 @@ function ResourceCard({
             {meta.kind !== 'water' && (
               <label>
                 {t.purity}
-                <select value={config.purity} onChange={(e) => onChange({ ...config, purity: e.target.value as Purity })}>
+                <select value={safeConfig.purity} onChange={(e) => onChange({ ...config, purity: e.target.value as Purity })}>
                   {(Object.keys(purityNames) as Purity[]).map((purity) => <option key={purity} value={purity}>{purityNames[purity][lang]}</option>)}
                 </select>
               </label>
@@ -286,14 +304,14 @@ function ResourceCard({
             {meta.kind === 'solid' && (
               <label>
                 {t.miner}
-                <select value={config.miner} onChange={(e) => onChange({ ...config, miner: e.target.value as MinerTier })}>
+                <select value={safeConfig.miner} onChange={(e) => onChange({ ...config, miner: e.target.value as MinerTier })}>
                   {minerOptions.map((miner) => <option key={miner} value={miner}>Miner Mk.{miner.slice(2)}</option>)}
                 </select>
               </label>
             )}
             <label>
               {t.count}
-              <input type="number" min="1" step="1" value={config.count}
+              <input type="number" min="1" step="1" value={safeConfig.count}
                 onChange={(e) => onChange({ ...config, count: Math.max(1, Math.floor(Number(e.target.value) || 1)) })} />
             </label>
           </div>
@@ -301,24 +319,24 @@ function ResourceCard({
           {meta.kind === 'solid' ? (
             <label>
               {t.belt}
-              <select value={config.belt} onChange={(e) => onChange({ ...config, belt: e.target.value as BeltTier })}>
+              <select value={safeConfig.belt} onChange={(e) => onChange({ ...config, belt: e.target.value as BeltTier })}>
                 {beltOptions.map((belt) => <option key={belt} value={belt}>Mk.{belt.slice(2)} — {beltRates[belt]}/min</option>)}
               </select>
             </label>
           ) : (
             <label>
               {t.pipe}
-              <select value={config.pipe} onChange={(e) => onChange({ ...config, pipe: e.target.value as PipeTier })}>
+              <select value={safeConfig.pipe} onChange={(e) => onChange({ ...config, pipe: e.target.value as PipeTier })}>
                 {pipeOptions.map((pipe) => <option key={pipe} value={pipe}>Mk.{pipe.slice(2)} — {pipeRates[pipe]} m³/min</option>)}
               </select>
             </label>
           )}
 
           <div className="extractor-visual">
-            {extractorIconUrl(meta.kind, config.miner) && (
+            {extractorIconUrl(meta.kind, safeConfig.miner) && (
               <img
-                src={extractorIconUrl(meta.kind, config.miner) ?? ''}
-                alt={meta.kind === 'solid' ? `Miner ${config.miner.toUpperCase()}` : displayResourceName(resourceId, lang)}
+                src={extractorIconUrl(meta.kind, safeConfig.miner) ?? ''}
+                alt={meta.kind === 'solid' ? `Miner ${safeConfig.miner.toUpperCase()}` : displayResourceName(resourceId, lang)}
                 loading="lazy"
                 onError={(event) => { event.currentTarget.style.display = 'none' }}
               />
@@ -327,7 +345,7 @@ function ResourceCard({
               <span>{meta.kind === 'solid' ? t.miner : t.resources}</span>
               <strong>
                 {meta.kind === 'solid'
-                  ? `Miner Mk.${config.miner.slice(2)}`
+                  ? `Miner Mk.${safeConfig.miner.slice(2)}`
                   : meta.kind === 'oil'
                     ? 'Oil Extractor'
                     : meta.kind === 'water'
@@ -345,16 +363,16 @@ function ResourceCard({
               <div className="clock-controls">
                 <label>
                   {t.extractorShards}
-                  <select value={config.shards} onChange={(e) => {
+                  <select value={safeConfig.shards} onChange={(e) => {
                     const shards = Number(e.target.value)
-                    onChange({ ...config, shards, clockSpeed: Math.min(config.clockSpeed, 100 + shards * 50) })
+                    onChange({ ...config, shards, clockSpeed: Math.min(safeConfig.clockSpeed, 100 + shards * 50) })
                   }}>
                     {[0,1,2,3].map((n) => <option key={n} value={n}>{n} → max. {100 + n * 50}%</option>)}
                   </select>
                 </label>
                 <label>
                   {t.extractorClock}
-                  <input type="number" min="1" max={maxClock} step="0.01" value={config.clockSpeed}
+                  <input type="number" min="1" max={maxClock} step="0.01" value={safeConfig.clockSpeed}
                     onChange={(e) => onChange({ ...config, clockSpeed: Math.max(1, Math.min(maxClock, Number(e.target.value) || 100)) })} />
                 </label>
               </div>
@@ -415,9 +433,9 @@ export default function App() {
 
   const availability = useMemo(() => {
     const result: Record<string, number> = {}
-    for (const [id, config] of Object.entries(resourceConfigs)) result[id] = resourceOutput(id, config, clockControlUnlocked).available
+    for (const [id, config] of Object.entries(resourceConfigs)) result[id] = resourceOutput(id, configForTier(config, tier), clockControlUnlocked).available
     return result
-  }, [resourceConfigs, clockControlUnlocked])
+  }, [resourceConfigs, clockControlUnlocked, tier])
 
   const firstPass = useMemo(
     () => calculateProduction(target, availability, clockControlUnlocked, productionShards, progressionOverrides),
@@ -435,9 +453,9 @@ export default function App() {
 
   const effectiveAvailability = useMemo(() => {
     const result: Record<string, number> = {}
-    for (const [id, config] of Object.entries(ensuredConfigs)) result[id] = resourceOutput(id, config, clockControlUnlocked).available
+    for (const [id, config] of Object.entries(ensuredConfigs)) result[id] = resourceOutput(id, configForTier(config, tier), clockControlUnlocked).available
     return result
-  }, [ensuredConfigs, clockControlUnlocked])
+  }, [ensuredConfigs, clockControlUnlocked, tier])
 
   const result = useMemo(
     () => calculateProduction(target, effectiveAvailability, clockControlUnlocked, productionShards, progressionOverrides),
@@ -461,7 +479,7 @@ export default function App() {
 
   const resourceRates = result.requiredResources.map((id) => ({
     id,
-    rate: resourceOutput(id, ensuredConfigs[id] ?? initialConfig(), clockControlUnlocked),
+    rate: resourceOutput(id, configForTier(ensuredConfigs[id] ?? initialConfig(), tier), clockControlUnlocked),
   }))
 
   const hasTransportLimit = resourceRates.some(({ rate }) => rate.transportLimited)
