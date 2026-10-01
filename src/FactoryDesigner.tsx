@@ -177,7 +177,7 @@ function normalizeLayout(layout: DesignerLayout): Required<DesignerLayout> {
 
   return {
     floors,
-    nodes: layout.nodes.map((node) => ({
+    nodes: (layout.nodes ?? []).map((node) => ({
       ...node,
       floorId: node.floorId ?? groundId,
     })),
