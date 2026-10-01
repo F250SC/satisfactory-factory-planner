@@ -1,15 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDownUp,
   GitFork,
   Layers3,
+  Maximize2,
   Merge,
+  Minus,
   Plus,
   RotateCw,
   Trash2,
   Unplug,
   WandSparkles,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import {
   beltRates,
@@ -118,9 +122,11 @@ interface PortPoint {
   side: Side
 }
 
-const GRID_W = 18
-const GRID_H = 12
 const CELL_PX = FOUNDATION_METERS * PIXELS_PER_METER
+const MIN_ZOOM = 0.2
+const MAX_ZOOM = 2
+const AUTO_SEARCH_W = 180
+const AUTO_SEARCH_H = 100
 const DEFAULT_FLOOR_GAP_M = 16
 const UTILITY_SIZE_M = 4
 const PORT_SIZE = 10
@@ -329,6 +335,11 @@ export default function FactoryDesigner({
   const [connectFrom, setConnectFrom] = useState<DesignerEndpoint | null>(null)
   const [beltToolActive, setBeltToolActive] = useState(false)
   const [defaultBeltTier, setDefaultBeltTier] = useState<BeltTier>('mk1')
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const [zoom, setZoom] = useState(0.8)
+  const [pan, setPan] = useState({ x: 48, y: 48 })
+  const [isPanning, setIsPanning] = useState(false)
+  const [panAnchor, setPanAnchor] = useState({ x: 0, y: 0 })
 
   const activeFloor =
     normalized.floors.find((floor) => floor.id === activeFloorId) ??
@@ -480,15 +491,7 @@ export default function FactoryDesigner({
     ignoreId?: string,
   ) => {
     const rect = rectFor(candidate)
-    const maxWidthM = GRID_W * FOUNDATION_METERS
-    const maxLengthM = GRID_H * FOUNDATION_METERS
-
-    if (
-      rect.left < 0 ||
-      rect.top < 0 ||
-      rect.right > maxWidthM ||
-      rect.bottom > maxLengthM
-    ) return false
+    if (rect.left < 0 || rect.top < 0) return false
 
     const machineCollision = nodes.some((node) => {
       if (node.id === ignoreId) return false
@@ -510,10 +513,7 @@ export default function FactoryDesigner({
 
   const utilityFits = (candidate: DesignerUtility, ignoreId?: string) => {
     const rect = utilityRect(candidate)
-    if (
-      rect.right > GRID_W * FOUNDATION_METERS ||
-      rect.bottom > GRID_H * FOUNDATION_METERS
-    ) return false
+    if (rect.left < 0 || rect.top < 0) return false
 
     const utilityCollision = normalized.utilities.some((utility) => {
       if (utility.id === ignoreId || utility.floorId !== candidate.floorId) return false
@@ -539,8 +539,8 @@ export default function FactoryDesigner({
     floorId: string,
     rotation: DesignerNode['rotation'] = 0,
   ) => {
-    for (let y = 0; y < GRID_H; y++) {
-      for (let x = 0; x < GRID_W; x++) {
+    for (let y = 0; y < AUTO_SEARCH_H; y++) {
+      for (let x = 0; x < AUTO_SEARCH_W; x++) {
         const candidate: DesignerNode = {
           id: 'probe',
           machineId,
@@ -584,8 +584,8 @@ export default function FactoryDesigner({
   }
 
   const addUtility = (kind: DesignerUtility['kind']) => {
-    for (let y = 0; y < GRID_H; y++) {
-      for (let x = 0; x < GRID_W; x++) {
+    for (let y = 0; y < AUTO_SEARCH_H; y++) {
+      for (let x = 0; x < AUTO_SEARCH_W; x++) {
         const utility: DesignerUtility = {
           id: `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           kind,
@@ -670,8 +670,8 @@ export default function FactoryDesigner({
     const rect = sourceRect(candidate)
 
     const blocked =
-      rect.right > GRID_W * FOUNDATION_METERS ||
-      rect.bottom > GRID_H * FOUNDATION_METERS ||
+      rect.left < 0 ||
+      rect.top < 0 ||
       normalized.nodes.some((node) =>
         (node.floorId ?? normalized.floors[0].id) === activeFloor.id &&
         overlaps(rect, rectFor(node))
@@ -713,8 +713,8 @@ export default function FactoryDesigner({
     const lift = normalized.lifts.find((entry) => entry.id === id)
     if (!lift) return
 
-    const clampedX = Math.max(0, Math.min(GRID_W - 1, x))
-    const clampedY = Math.max(0, Math.min(GRID_H - 1, y))
+    const clampedX = Math.max(0, x)
+    const clampedY = Math.max(0, y)
 
     const occupied = normalized.lifts.some(
       (entry) =>
@@ -941,7 +941,7 @@ export default function FactoryDesigner({
 
     const nextSourceSpot = () => {
       for (let x = 0; x < 2; x += 1) {
-        for (let y = 0; y < GRID_H; y += 1) {
+        for (let y = 0; y < AUTO_SEARCH_H; y += 1) {
           if (!sourceOccupied(x, y)) return { x, y }
         }
       }
@@ -963,8 +963,8 @@ export default function FactoryDesigner({
       itemId: string,
       preferredX: number,
     ) => {
-      for (let x = Math.max(1, preferredX); x < GRID_W; x += 1) {
-        for (let y = 0; y < GRID_H; y += 1) {
+      for (let x = Math.max(1, preferredX); x < AUTO_SEARCH_W; x += 1) {
+        for (let y = 0; y < AUTO_SEARCH_H; y += 1) {
           const candidate: DesignerNode = {
             id: 'probe',
             machineId,
@@ -978,7 +978,7 @@ export default function FactoryDesigner({
         }
       }
       for (let x = 1; x < Math.max(1, preferredX); x += 1) {
-        for (let y = 0; y < GRID_H; y += 1) {
+        for (let y = 0; y < AUTO_SEARCH_H; y += 1) {
           const candidate: DesignerNode = {
             id: 'probe',
             machineId,
@@ -1037,7 +1037,7 @@ export default function FactoryDesigner({
 
     for (const step of orderedSteps) {
       const group: DesignerNode[] = []
-      const preferredX = Math.min(GRID_W - 2, 2 + depthFor(step.item) * 3)
+      const preferredX = 2 + depthFor(step.item) * 4
       for (let i = 0; i < step.machines; i += 1) {
         const spot = placeNode(step.recipe.producedIn, step.item, preferredX)
         if (!spot) {
@@ -1079,8 +1079,8 @@ export default function FactoryDesigner({
     }
 
     const addAutoUtility = (kind: DesignerUtility['kind']) => {
-      for (let x = 1; x < GRID_W; x += 1) {
-        for (let y = 0; y < GRID_H; y += 1) {
+      for (let x = 1; x < AUTO_SEARCH_W; x += 1) {
+        for (let y = 0; y < AUTO_SEARCH_H; y += 1) {
           if (!utilityFree(x, y)) continue
           const utility: DesignerUtility = {
             id: `auto-${kind}-${generatedUtilities.length}-${Date.now()}`,
