@@ -448,6 +448,51 @@ function orthogonalPath(from: PortPoint, to: PortPoint) {
   }
 }
 
+function segmentIntersectsRect(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  rect: { left: number; top: number; right: number; bottom: number },
+) {
+  if (a.x === b.x) {
+    const y1 = Math.min(a.y, b.y)
+    const y2 = Math.max(a.y, b.y)
+    return a.x > rect.left && a.x < rect.right && y2 > rect.top && y1 < rect.bottom
+  }
+  if (a.y === b.y) {
+    const x1 = Math.min(a.x, b.x)
+    const x2 = Math.max(a.x, b.x)
+    return a.y > rect.top && a.y < rect.bottom && x2 > rect.left && x1 < rect.right
+  }
+  return false
+}
+
+function segmentsOverlap(
+  a1: { x: number; y: number },
+  a2: { x: number; y: number },
+  b1: { x: number; y: number },
+  b2: { x: number; y: number },
+) {
+  const aVertical = a1.x === a2.x
+  const bVertical = b1.x === b2.x
+  if (aVertical !== bVertical) return false
+
+  if (aVertical) {
+    if (Math.abs(a1.x - b1.x) > 2) return false
+    const aMin = Math.min(a1.y, a2.y)
+    const aMax = Math.max(a1.y, a2.y)
+    const bMin = Math.min(b1.y, b2.y)
+    const bMax = Math.max(b1.y, b2.y)
+    return Math.min(aMax, bMax) - Math.max(aMin, bMin) > 4
+  }
+
+  if (Math.abs(a1.y - b1.y) > 2) return false
+  const aMin = Math.min(a1.x, a2.x)
+  const aMax = Math.max(a1.x, a2.x)
+  const bMin = Math.min(b1.x, b2.x)
+  const bMax = Math.max(b1.x, b2.x)
+  return Math.min(aMax, bMax) - Math.max(aMin, bMin) > 4
+}
+
 export default function FactoryDesigner({
   lang,
   steps,
@@ -1722,39 +1767,6 @@ export default function FactoryDesigner({
       }
     }
 
-    // Give every automatically generated belt its own routing channel.
-    // This prevents identical belt segments from stacking directly on top of each other.
-    generatedBelts.forEach((belt, index) => {
-      const from = centerOfEndpoint(belt.from)
-      const to = centerOfEndpoint(belt.to)
-      const direction = to.x >= from.x ? 1 : -1
-      const baseMidX = (from.x + to.x) / 2
-      const lane = ((index % 9) - 4) * 0.22
-      const channelX = baseMidX + lane
-      const sourceStubX = from.x + direction * 0.7
-      const targetStubX = to.x - direction * 0.7
-
-      belt.routeStyle = 'orthogonal'
-      belt.waypoints = [
-        {
-          x: sourceStubX * FOUNDATION_METERS,
-          y: from.y * FOUNDATION_METERS,
-        },
-        {
-          x: channelX * FOUNDATION_METERS,
-          y: from.y * FOUNDATION_METERS,
-        },
-        {
-          x: channelX * FOUNDATION_METERS,
-          y: to.y * FOUNDATION_METERS,
-        },
-        {
-          x: targetStubX * FOUNDATION_METERS,
-          y: to.y * FOUNDATION_METERS,
-        },
-      ]
-    })
-
     writeLayout(
       [...keepNodes, ...generatedNodes],
       normalized.floors,
@@ -2051,6 +2063,137 @@ export default function FactoryDesigner({
     )
   }
 
+
+  const smartAutoRoutes = useMemo(() => {
+    const result = new Map<string, ReturnType<typeof orthogonalPath>>()
+    const occupied: Array<[
+      { x: number; y: number },
+      { x: number; y: number }
+    ]> = []
+
+    const obstacleRects = [
+      ...activeNodes.map((node) => {
+        const rect = rectFor(node)
+        return {
+          id: `node:${node.id}`,
+          left: rect.left * PIXELS_PER_METER - 8,
+          top: rect.top * PIXELS_PER_METER - 8,
+          right: rect.right * PIXELS_PER_METER + 8,
+          bottom: rect.bottom * PIXELS_PER_METER + 8,
+        }
+      }),
+      ...activeSources.map((source) => {
+        const rect = sourceRect(source)
+        return {
+          id: `source:${source.id}`,
+          left: rect.left * PIXELS_PER_METER - 8,
+          top: rect.top * PIXELS_PER_METER - 8,
+          right: rect.right * PIXELS_PER_METER + 8,
+          bottom: rect.bottom * PIXELS_PER_METER + 8,
+        }
+      }),
+      ...activeUtilities.map((utility) => {
+        const rect = utilityRect(utility)
+        return {
+          id: `utility:${utility.id}`,
+          left: rect.left * PIXELS_PER_METER - 8,
+          top: rect.top * PIXELS_PER_METER - 8,
+          right: rect.right * PIXELS_PER_METER + 8,
+          bottom: rect.bottom * PIXELS_PER_METER + 8,
+        }
+      }),
+    ]
+
+    for (const belt of activeBelts) {
+      if (belt.waypoints?.length) continue
+      const from = portPoint(belt.from)
+      const to = portPoint(belt.to)
+      if (!from || !to) continue
+
+      const fromStub = pushPoint(from, PORT_STUB)
+      const toStub = pushPoint(to, PORT_STUB)
+      const baseX = (fromStub.x + toStub.x) / 2
+
+      const candidates = [
+        0, 18, -18, 36, -36, 54, -54, 72, -72, 96, -96, 128, -128,
+      ].map((offset) => baseX + offset)
+
+      let best:
+        | {
+            score: number
+            route: ReturnType<typeof orthogonalPath>
+            segments: Array<[
+              { x: number; y: number },
+              { x: number; y: number }
+            ]>
+          }
+        | null = null
+
+      for (const channelX of candidates) {
+        const points = [
+          { x: from.x, y: from.y },
+          { x: fromStub.x, y: fromStub.y },
+          { x: channelX, y: fromStub.y },
+          { x: channelX, y: toStub.y },
+          { x: toStub.x, y: toStub.y },
+          { x: to.x, y: to.y },
+        ]
+
+        const segments = points.slice(0, -1).map(
+          (point, index) =>
+            [point, points[index + 1]] as [
+              { x: number; y: number },
+              { x: number; y: number },
+            ],
+        )
+
+        let score = Math.abs(channelX - baseX) * 0.15
+
+        const sourceKey = `${belt.from.kind}:${belt.from.id}`
+        const targetKey = `${belt.to.kind}:${belt.to.id}`
+
+        for (const segment of segments) {
+          for (const rect of obstacleRects) {
+            if (rect.id === sourceKey || rect.id === targetKey) continue
+            if (segmentIntersectsRect(segment[0], segment[1], rect)) {
+              score += 10000
+            }
+          }
+
+          for (const used of occupied) {
+            if (segmentsOverlap(segment[0], segment[1], used[0], used[1])) {
+              score += 300
+            }
+          }
+        }
+
+        const route = {
+          d: pointsToPath(points, false),
+          labelX: channelX + 4,
+          labelY: (fromStub.y + toStub.y) / 2 - 4,
+        }
+
+        if (!best || score < best.score) {
+          best = { score, route, segments }
+        }
+      }
+
+      if (best) {
+        result.set(belt.id, best.route)
+        occupied.push(...best.segments)
+      }
+    }
+
+    return result
+  }, [
+    activeBelts,
+    activeNodes,
+    activeSources,
+    activeUtilities,
+    normalized.nodes,
+    normalized.sources,
+    normalized.utilities,
+  ])
 
   const setZoomAround = (nextZoom: number, clientX?: number, clientY?: number) => {
     const viewport = viewportRef.current
@@ -2413,7 +2556,7 @@ export default function FactoryDesigner({
                   {lang === 'de' ? 'überlastet' : 'overloaded'}
                 </small>
               </summary>
-              {activeBelts.map((belt, beltIndex) => {
+              {activeBelts.map((belt) => {
                 const flow = flowForEndpoint(belt.from)
                 const overloaded = flow > beltRates[belt.tier] + 0.001
                 return (
@@ -2635,16 +2778,17 @@ export default function FactoryDesigner({
                 if (!from || !to) return null
                 const flow = flowForEndpoint(belt.from)
                 const overloaded = flow > beltRates[belt.tier] + 0.001
-                const laneOffset = belt.waypoints?.length
-                  ? 0
-                  : ((beltIndex % 7) - 3) * 4
-                const route = routedPath(
-                  from,
-                  to,
-                  belt.waypoints,
-                  belt.routeStyle ?? 'orthogonal',
-                  laneOffset,
-                )
+                const route = belt.waypoints?.length
+                  ? routedPath(
+                      from,
+                      to,
+                      belt.waypoints,
+                      belt.routeStyle ?? 'orthogonal',
+                      0,
+                    )
+                  : belt.routeStyle === 'straight'
+                    ? routedPath(from, to, undefined, 'straight', 0)
+                    : smartAutoRoutes.get(belt.id) ?? orthogonalPath(from, to)
                 const selectedRoute = selectedBeltId === belt.id
 
                 return (
@@ -2671,16 +2815,18 @@ export default function FactoryDesigner({
                           : 'url(#belt-arrow)'
                       }
                     />
-                    <text
-                      className="belt-label"
-                      x={route.labelX}
-                      y={route.labelY}
-                    >
-                      {belt.materialId
-                        ? `${itemName(belt.materialId, lang)} · `
-                        : ''}
-                      Mk.{belt.tier.slice(2)}
-                    </text>
+                    {selectedRoute && (
+                      <text
+                        className="belt-label"
+                        x={route.labelX}
+                        y={route.labelY}
+                      >
+                        {belt.materialId
+                          ? `${itemName(belt.materialId, lang)} · `
+                          : ''}
+                        Mk.{belt.tier.slice(2)}
+                      </text>
+                    )}
                   </g>
                 )
               })}
