@@ -88,6 +88,10 @@ The production calculation supports liquid/gas rates and pipe limits. The Factor
 
 The UI warns when a selected factory contains fluids or gases.
 
+### Conveyor lifts and cross-floor flow
+
+Conveyor lifts can be placed, moved and shown on the connected floors, but they are not yet first-class material-flow endpoints in the routing graph. Cross-floor conveyor routing through a lift therefore still requires a dedicated implementation.
+
 ### Automatic layout
 
 The auto-layout is intended to create a useful editable starting factory, not a guaranteed globally optimal building layout. Manual movement and routing remain part of the Designer workflow.
