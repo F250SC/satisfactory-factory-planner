@@ -279,6 +279,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
   const [activeFloorId, setActiveFloorId] = useState(normalized.floors[0].id)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedUtilityId, setSelectedUtilityId] = useState<string | null>(null)
+  const [selectedLiftId, setSelectedLiftId] = useState<string | null>(null)
   const [placementError, setPlacementError] = useState<string | null>(null)
   const [connectFrom, setConnectFrom] = useState<DesignerEndpoint | null>(null)
   const [defaultBeltTier, setDefaultBeltTier] = useState<BeltTier>('mk1')
@@ -292,6 +293,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
       setActiveFloorId(normalized.floors[0].id)
       setSelectedId(null)
       setSelectedUtilityId(null)
+      setSelectedLiftId(null)
     }
   }, [layout, activeFloorId])
 
@@ -582,6 +584,48 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
     )
     setSelectedUtilityId(id)
     setSelectedId(null)
+    setPlacementError(null)
+  }
+
+  const moveLift = (id: string, x: number, y: number) => {
+    const lift = normalized.lifts.find((entry) => entry.id === id)
+    if (!lift) return
+
+    const clampedX = Math.max(0, Math.min(GRID_W - 1, x))
+    const clampedY = Math.max(0, Math.min(GRID_H - 1, y))
+
+    const occupied = normalized.lifts.some(
+      (entry) =>
+        entry.id !== id &&
+        entry.x === clampedX &&
+        entry.y === clampedY &&
+        (
+          entry.fromFloorId === activeFloor.id ||
+          entry.toFloorId === activeFloor.id
+        ),
+    )
+
+    if (occupied) {
+      setPlacementError(
+        lang === 'de'
+          ? 'An dieser Position befindet sich bereits ein Conveyor Lift.'
+          : 'There is already a conveyor lift at this position.',
+      )
+      return
+    }
+
+    writeLayout(
+      normalized.nodes,
+      normalized.floors,
+      normalized.lifts.map((entry) =>
+        entry.id === id
+          ? { ...entry, x: clampedX, y: clampedY }
+          : entry,
+      ),
+    )
+    setSelectedLiftId(id)
+    setSelectedId(null)
+    setSelectedUtilityId(null)
     setPlacementError(null)
   }
 
@@ -1289,7 +1333,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
               if (!raw) return
 
               const payload = JSON.parse(raw) as {
-                kind: 'node' | 'utility'
+                kind: 'node' | 'utility' | 'lift'
                 id: string
                 offsetX: number
                 offsetY: number
@@ -1311,7 +1355,8 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
               )
 
               if (payload.kind === 'node') moveNode(payload.id, x, y)
-              else moveUtility(payload.id, x, y)
+              else if (payload.kind === 'utility') moveUtility(payload.id, x, y)
+              else moveLift(payload.id, x, y)
             }}
           >
             {Array.from({ length: GRID_W * GRID_H }).map((_, index) => (
@@ -1383,16 +1428,40 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
             </svg>
 
             {floorLifts.map((lift) => (
-              <div
+              <button
                 key={lift.id}
-                className="factory-lift"
+                draggable
+                className={`factory-lift ${selectedLiftId === lift.id ? 'selected' : ''}`}
                 style={{
                   left: lift.x * CELL_PX + CELL_PX / 2 - 12,
                   top: lift.y * CELL_PX + CELL_PX / 2 - 12,
                 }}
+                title={lang === 'de' ? 'Conveyor Lift verschieben' : 'Move conveyor lift'}
+                onDragStart={(e) => {
+                  const elementRect = e.currentTarget.getBoundingClientRect()
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData(
+                    'application/x-satisfactory-object',
+                    JSON.stringify({
+                      kind: 'lift',
+                      id: lift.id,
+                      offsetX: e.clientX - elementRect.left,
+                      offsetY: e.clientY - elementRect.top,
+                    }),
+                  )
+                  setSelectedLiftId(lift.id)
+                  setSelectedId(null)
+                  setSelectedUtilityId(null)
+                }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedLiftId(lift.id)
+                  setSelectedId(null)
+                  setSelectedUtilityId(null)
+                }}
               >
                 <ArrowDownUp size={16} />
-              </div>
+              </button>
             ))}
 
             {activeUtilities.map((utility) => {
