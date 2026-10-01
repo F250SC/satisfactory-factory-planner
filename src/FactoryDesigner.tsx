@@ -974,7 +974,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
             counts.input,
           )
           return (
-            <span
+            <i
               key={`in-${index}`}
               role="button"
               tabIndex={0}
@@ -1005,7 +1005,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
                   })
                 }
               }}
-            />
+            ></i>
           )
         })}
         {Array.from({ length: counts.output }).map((_, index) => {
@@ -1026,7 +1026,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
               })
 
           return (
-            <span
+            <i
               key={`out-${index}`}
               role="button"
               tabIndex={0}
@@ -1057,7 +1057,7 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
                   })
                 }
               }}
-            />
+            ></i>
           )
         })}
       </>
