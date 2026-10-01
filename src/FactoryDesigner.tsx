@@ -980,6 +980,7 @@ export default function FactoryDesigner({
 
   const generateFromPlan = () => {
     setPlacementError(null)
+
     const keepNodes = normalized.nodes.filter(
       (node) => (node.floorId ?? normalized.floors[0].id) !== activeFloor.id,
     )
@@ -1003,61 +1004,47 @@ export default function FactoryDesigner({
       const tiers = (Object.keys(beltRates) as BeltTier[])
         .filter((tier) => Number(tier.slice(2)) <= maxBeltRank)
         .sort((a, b) => beltRates[a] - beltRates[b])
-      return tiers.find((tier) => beltRates[tier] + 0.001 >= rate) ?? tiers[tiers.length - 1] ?? 'mk1'
+      return (
+        tiers.find((tier) => beltRates[tier] + 0.001 >= rate) ??
+        tiers[tiers.length - 1] ??
+        'mk1'
+      )
     }
 
-    const sourceOccupied = (x: number, y: number) =>
-      generatedSources.some((source) => source.x === x && source.y === y)
-
-    const nextSourceSpot = () => {
-      for (let x = 0; x < 2; x += 1) {
-        for (let y = 0; y < AUTO_SEARCH_H; y += 1) {
-          if (!sourceOccupied(x, y)) return { x, y }
-        }
-      }
-      return null
-    }
-
-    const nodeFitsLocal = (candidate: DesignerNode) => {
-      const rect = rectFor(candidate)
-      if (generatedNodes.some((node) => overlaps(rect, rectFor(node)))) return false
-      return !generatedSources.some((source) => overlaps(rect, sourceRect(source)))
-    }
-
-    const placeNode = (
-      machineId: string,
-      itemId: string,
-      preferredX: number,
+    const addBelt = (
+      from: DesignerEndpoint,
+      to: DesignerEndpoint,
+      rate: number,
+      materialId: string,
     ) => {
-      for (let x = Math.max(1, preferredX); x < AUTO_SEARCH_W; x += 1) {
-        for (let y = 0; y < AUTO_SEARCH_H; y += 1) {
-          const candidate: DesignerNode = {
-            id: 'probe',
-            machineId,
-            itemId,
-            x,
-            y,
-            floorId: activeFloor.id,
-            rotation: 0,
-          }
-          if (nodeFitsLocal(candidate)) return { x, y }
-        }
-      }
-      for (let x = 1; x < Math.max(1, preferredX); x += 1) {
-        for (let y = 0; y < AUTO_SEARCH_H; y += 1) {
-          const candidate: DesignerNode = {
-            id: 'probe',
-            machineId,
-            itemId,
-            x,
-            y,
-            floorId: activeFloor.id,
-            rotation: 0,
-          }
-          if (nodeFitsLocal(candidate)) return { x, y }
-        }
-      }
-      return null
+      generatedBelts.push({
+        id: `auto-belt-${generatedBelts.length}-${Date.now()}`,
+        floorId: activeFloor.id,
+        from,
+        to,
+        tier: beltTierFor(rate),
+        materialId,
+      })
+    }
+
+    const recipeOutputPerMinute = (step: MachineStep, machineIndex: number) => {
+      const product =
+        step.recipe.products.find((part) => part.item === step.item) ??
+        step.recipe.products[0]
+      if (!product || step.recipe.time <= 0) return 0
+      const clock = step.clocks[machineIndex] ?? 100
+      return product.amount * (60 / step.recipe.time) * (clock / 100)
+    }
+
+    const recipeInputPerMinute = (
+      step: MachineStep,
+      ingredientIndex: number,
+      machineIndex: number,
+    ) => {
+      const ingredient = step.recipe.ingredients[ingredientIndex]
+      if (!ingredient || step.recipe.time <= 0) return 0
+      const clock = step.clocks[machineIndex] ?? 100
+      return ingredient.amount * (60 / step.recipe.time) * (clock / 100)
     }
 
     const stepByItem = new Map(steps.map((step) => [step.item, step]))
@@ -1077,245 +1064,499 @@ export default function FactoryDesigner({
       return depth
     }
 
-    for (let r = 0; r < resources.length; r += 1) {
-      const resource = resources[r]
+    const orderedSteps = [...steps].sort(
+      (a, b) => depthFor(a.item) - depthFor(b.item),
+    )
+
+    // Sources form the left-most column and are centered vertically.
+    const totalSources = resources.reduce(
+      (sum, resource) => sum + Math.max(1, resource.config.count || 1),
+      0,
+    )
+    let sourceCursor = -Math.floor(totalSources / 2)
+    for (const resource of resources) {
       const count = Math.max(1, resource.config.count || 1)
       const perSource = resource.usedRate / count
       for (let i = 0; i < count; i += 1) {
-        const spot = nextSourceSpot()
-        if (!spot) break
         generatedSources.push({
           id: `source-${resource.id}-${i}-${Date.now()}`,
           resourceId: resource.id,
           miner: resource.config.miner,
           rate: perSource,
-          x: spot.x,
-          y: spot.y,
+          x: 0,
+          y: sourceCursor * 2,
           floorId: activeFloor.id,
         })
+        sourceCursor += 1
       }
     }
 
-    const nodeGroups = new Map<string, DesignerNode[]>()
-    const orderedSteps = [...steps].sort(
-      (a, b) => depthFor(a.item) - depthFor(b.item),
-    )
-
+    // Arrange each production depth as one clean vertical machine column.
+    const stepsByDepth = new Map<number, MachineStep[]>()
     for (const step of orderedSteps) {
-      const group: DesignerNode[] = []
-      const preferredX = 2 + depthFor(step.item) * 4
-      for (let i = 0; i < step.machines; i += 1) {
-        const spot = placeNode(step.recipe.producedIn, step.item, preferredX)
-        if (!spot) {
-          setPlacementError(
-            lang === 'de'
-              ? 'Die komplette Grundfabrik passt nicht auf die aktive Etage. Der erzeugte Teil wurde trotzdem angelegt.'
-              : 'The complete starter factory does not fit on the active floor. The portion that fits was still generated.',
-          )
-          break
+      const depth = depthFor(step.item)
+      const list = stepsByDepth.get(depth) ?? []
+      list.push(step)
+      stepsByDepth.set(depth, list)
+    }
+
+    const nodeGroups = new Map<string, DesignerNode[]>()
+    const machineIndexByNode = new Map<string, number>()
+
+    for (const [depth, stageSteps] of [...stepsByDepth.entries()].sort(
+      (a, b) => a[0] - b[0],
+    )) {
+      const descriptors: Array<{
+        step: MachineStep
+        machineIndex: number
+        height: number
+      }> = []
+
+      for (const step of stageSteps) {
+        for (let i = 0; i < step.machines; i += 1) {
+          const size = footprintFor(step.recipe.producedIn)
+          descriptors.push({
+            step,
+            machineIndex: i,
+            height: Math.max(1, Math.ceil(size.lengthM / FOUNDATION_METERS)),
+          })
         }
+      }
+
+      const totalHeight =
+        descriptors.reduce((sum, entry) => sum + entry.height, 0) +
+        Math.max(0, descriptors.length - 1)
+
+      let yCursor = -Math.floor(totalHeight / 2)
+      const x = 4 + (depth - 1) * 6
+
+      for (const descriptor of descriptors) {
+        const { step, machineIndex, height } = descriptor
         const node: DesignerNode = {
-          id: `auto-${step.recipe.producedIn}-${step.item}-${i}-${Date.now()}`,
+          id: `auto-${step.recipe.producedIn}-${step.item}-${machineIndex}-${Date.now()}`,
           machineId: step.recipe.producedIn,
           itemId: step.item,
-          x: spot.x,
-          y: spot.y,
+          x,
+          y: yCursor,
           floorId: activeFloor.id,
           rotation: 0,
         }
         generatedNodes.push(node)
+        machineIndexByNode.set(node.id, machineIndex)
+        const group = nodeGroups.get(step.item) ?? []
         group.push(node)
+        nodeGroups.set(step.item, group)
+        yCursor += height + 1
       }
-      nodeGroups.set(step.item, group)
     }
 
-    const utilityFree = (x: number, y: number) => {
-      const candidate: DesignerUtility = {
-        id: 'probe',
-        kind: 'splitter',
-        x,
-        y,
-        floorId: activeFloor.id,
-        rotation: 0,
-      }
+    const utilityFree = (candidate: DesignerUtility) => {
       const rect = utilityRect(candidate)
       if (generatedNodes.some((node) => overlaps(rect, rectFor(node)))) return false
       if (generatedSources.some((source) => overlaps(rect, sourceRect(source)))) return false
-      return !generatedUtilities.some((utility) => overlaps(rect, utilityRect(utility)))
+      return !generatedUtilities.some((utility) =>
+        overlaps(rect, utilityRect(utility)),
+      )
     }
 
-    const addAutoUtility = (kind: DesignerUtility['kind']) => {
-      for (let x = 1; x < AUTO_SEARCH_W; x += 1) {
-        for (let y = 0; y < AUTO_SEARCH_H; y += 1) {
-          if (!utilityFree(x, y)) continue
-          const utility: DesignerUtility = {
-            id: `auto-${kind}-${generatedUtilities.length}-${Date.now()}`,
-            kind,
-            x,
-            y,
-            floorId: activeFloor.id,
-            rotation: 0,
-          }
-          generatedUtilities.push(utility)
-          return utility
+    const addAutoUtilityNear = (
+      kind: DesignerUtility['kind'],
+      preferredX: number,
+      preferredY: number,
+    ) => {
+      const offsets: Array<[number, number]> = [[0, 0]]
+      for (let radius = 1; radius <= 8; radius += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          offsets.push([dx, -radius], [dx, radius])
         }
+        for (let dy = -radius + 1; dy < radius; dy += 1) {
+          offsets.push([-radius, dy], [radius, dy])
+        }
+      }
+
+      for (const [dx, dy] of offsets) {
+        const utility: DesignerUtility = {
+          id: `auto-${kind}-${generatedUtilities.length}-${Date.now()}`,
+          kind,
+          x: Math.round(preferredX + dx),
+          y: Math.round(preferredY + dy),
+          floorId: activeFloor.id,
+          rotation: 0,
+        }
+        if (!utilityFree(utility)) continue
+        generatedUtilities.push(utility)
+        return utility
       }
       return null
     }
 
-    const addBelt = (
-      from: DesignerEndpoint,
-      to: DesignerEndpoint,
-      rate: number,
-      materialId: string,
-    ) => {
-      generatedBelts.push({
-        id: `auto-belt-${generatedBelts.length}-${Date.now()}`,
-        floorId: activeFloor.id,
-        from,
-        to,
-        tier: beltTierFor(rate),
-        materialId,
-      })
-    }
-
-    const combine = (
-      producers: DesignerEndpoint[],
-      rate: number,
-      materialId: string,
-    ): DesignerEndpoint | null => {
-      let current = [...producers]
-      while (current.length > 1) {
-        const next: DesignerEndpoint[] = []
-        for (let i = 0; i < current.length; i += 3) {
-          const batch = current.slice(i, i + 3)
-          if (batch.length === 1) {
-            next.push(batch[0])
-            continue
-          }
-          const merger = addAutoUtility('merger')
-          if (!merger) return current[0] ?? null
-          batch.forEach((endpoint, port) =>
-            addBelt(
-              endpoint,
-              { kind: 'utility', id: merger.id, side: 'input', port },
-              rate / Math.max(1, producers.length),
-              materialId,
-            ),
-          )
-          next.push({ kind: 'utility', id: merger.id, side: 'output', port: 0 })
+    const centerOfEndpoint = (endpoint: DesignerEndpoint) => {
+      if (endpoint.kind === 'source') {
+        const source = generatedSources.find((entry) => entry.id === endpoint.id)
+        return source
+          ? { x: source.x + 0.5, y: source.y + 0.5 }
+          : { x: 0, y: 0 }
+      }
+      if (endpoint.kind === 'node') {
+        const node = generatedNodes.find((entry) => entry.id === endpoint.id)
+        if (!node) return { x: 0, y: 0 }
+        const size = footprintFor(node.machineId)
+        return {
+          x: node.x + size.widthM / FOUNDATION_METERS / 2,
+          y: node.y + size.lengthM / FOUNDATION_METERS / 2,
         }
-        current = next
       }
-      return current[0] ?? null
+      const utility = generatedUtilities.find((entry) => entry.id === endpoint.id)
+      return utility
+        ? { x: utility.x + 0.25, y: utility.y + 0.25 }
+        : { x: 0, y: 0 }
     }
 
-    const distribute = (
-      source: DesignerEndpoint,
-      consumers: DesignerEndpoint[],
-      totalRate: number,
-      materialId: string,
-    ) => {
-      if (consumers.length === 0) return
-      if (consumers.length === 1) {
-        addBelt(source, consumers[0], totalRate, materialId)
-        return
-      }
-
-      const splitter = addAutoUtility('splitter')
-      if (!splitter) {
-        consumers.forEach((consumer) =>
-          addBelt(
-            source,
-            consumer,
-            totalRate / consumers.length,
-            materialId,
-          ),
-        )
-        return
-      }
-
-      addBelt(
-        source,
-        { kind: 'utility', id: splitter.id, side: 'input', port: 0 },
-        totalRate,
-        materialId,
-      )
-
-      if (consumers.length <= 3) {
-        consumers.forEach((consumer, port) =>
-          addBelt(
-            { kind: 'utility', id: splitter.id, side: 'output', port },
-            consumer,
-            totalRate / consumers.length,
-            materialId,
-          ),
-        )
-        return
-      }
-
-      addBelt(
-        { kind: 'utility', id: splitter.id, side: 'output', port: 0 },
-        consumers[0],
-        totalRate / consumers.length,
-        materialId,
-      )
-      addBelt(
-        { kind: 'utility', id: splitter.id, side: 'output', port: 1 },
-        consumers[1],
-        totalRate / consumers.length,
-        materialId,
-      )
-      distribute(
-        { kind: 'utility', id: splitter.id, side: 'output', port: 2 },
-        consumers.slice(2),
-        totalRate * ((consumers.length - 2) / consumers.length),
-        materialId,
-      )
+    type FlowPoint = {
+      endpoint: DesignerEndpoint
+      rate: number
     }
 
-    const producersByItem = new Map<string, DesignerEndpoint[]>()
+    type Allocation = {
+      from: FlowPoint
+      to: FlowPoint
+      rate: number
+      fromEndpoint?: DesignerEndpoint
+    }
+
+    const producersByItem = new Map<string, FlowPoint[]>()
     for (const source of generatedSources) {
       const list = producersByItem.get(source.resourceId) ?? []
-      list.push({ kind: 'source', id: source.id, side: 'output', port: 0 })
+      list.push({
+        endpoint: {
+          kind: 'source',
+          id: source.id,
+          side: 'output',
+          port: 0,
+        },
+        rate: source.rate,
+      })
       producersByItem.set(source.resourceId, list)
     }
+
     for (const [itemId, nodes] of nodeGroups) {
-      producersByItem.set(
-        itemId,
-        nodes.map((node) => ({ kind: 'node', id: node.id, side: 'output', port: 0 })),
+      const step = stepByItem.get(itemId)
+      if (!step) continue
+      const list: FlowPoint[] = []
+      for (const node of nodes) {
+        const index = machineIndexByNode.get(node.id) ?? 0
+        list.push({
+          endpoint: {
+            kind: 'node',
+            id: node.id,
+            side: 'output',
+            port: 0,
+          },
+          rate: recipeOutputPerMinute(step, index),
+        })
+      }
+      producersByItem.set(itemId, list)
+    }
+
+    const consumersByItem = new Map<string, FlowPoint[]>()
+    for (const step of orderedSteps) {
+      const nodes = nodeGroups.get(step.item) ?? []
+      for (const node of nodes) {
+        const machineIndex = machineIndexByNode.get(node.id) ?? 0
+        step.recipe.ingredients.forEach((ingredient, ingredientIndex) => {
+          const list = consumersByItem.get(ingredient.item) ?? []
+          list.push({
+            endpoint: {
+              kind: 'node',
+              id: node.id,
+              side: 'input',
+              port: ingredientIndex,
+            },
+            rate: recipeInputPerMinute(
+              step,
+              ingredientIndex,
+              machineIndex,
+            ),
+          })
+          consumersByItem.set(ingredient.item, list)
+        })
+      }
+    }
+
+    const endpointObjectKey = (endpoint: DesignerEndpoint) =>
+      `${endpoint.kind}:${endpoint.id}:${endpoint.side}:${endpoint.port ?? 0}`
+
+    // Split one producer locally only when it really feeds multiple consumers.
+    const buildSplitterOutputs = (
+      source: FlowPoint,
+      allocations: Allocation[],
+      materialId: string,
+    ) => {
+      if (allocations.length === 1) {
+        allocations[0].fromEndpoint = source.endpoint
+        return
+      }
+
+      const sourcePos = centerOfEndpoint(source.endpoint)
+      const averageTargetY =
+        allocations.reduce(
+          (sum, allocation) => sum + centerOfEndpoint(allocation.to.endpoint).y,
+          0,
+        ) / allocations.length
+
+      const createTree = (
+        input: DesignerEndpoint,
+        batch: Allocation[],
+        x: number,
+        y: number,
+        incomingRate: number,
+      ) => {
+        if (batch.length === 1) {
+          batch[0].fromEndpoint = input
+          return
+        }
+
+        const splitter = addAutoUtilityNear('splitter', x, y)
+        if (!splitter) {
+          batch.forEach((allocation) => {
+            allocation.fromEndpoint = input
+          })
+          return
+        }
+
+        addBelt(
+          input,
+          { kind: 'utility', id: splitter.id, side: 'input', port: 0 },
+          incomingRate,
+          materialId,
+        )
+
+        if (batch.length <= 3) {
+          batch.forEach((allocation, port) => {
+            allocation.fromEndpoint = {
+              kind: 'utility',
+              id: splitter.id,
+              side: 'output',
+              port,
+            }
+          })
+          return
+        }
+
+        batch.slice(0, 2).forEach((allocation, port) => {
+          allocation.fromEndpoint = {
+            kind: 'utility',
+            id: splitter.id,
+            side: 'output',
+            port,
+          }
+        })
+
+        const rest = batch.slice(2)
+        createTree(
+          {
+            kind: 'utility',
+            id: splitter.id,
+            side: 'output',
+            port: 2,
+          },
+          rest,
+          x + 1,
+          rest.reduce(
+            (sum, allocation) => sum + centerOfEndpoint(allocation.to.endpoint).y,
+            0,
+          ) / rest.length,
+          rest.reduce((sum, allocation) => sum + allocation.rate, 0),
+        )
+      }
+
+      createTree(
+        source.endpoint,
+        allocations,
+        sourcePos.x + 1.5,
+        (sourcePos.y + averageTargetY) / 2,
+        allocations.reduce((sum, allocation) => sum + allocation.rate, 0),
       )
     }
 
-    const consumersByItem = new Map<string, DesignerEndpoint[]>()
-    for (const step of orderedSteps) {
-      const nodes = nodeGroups.get(step.item) ?? []
-      step.recipe.ingredients.forEach((ingredient, ingredientIndex) => {
-        const list = consumersByItem.get(ingredient.item) ?? []
-        nodes.forEach((node) =>
-          list.push({
-            kind: 'node',
-            id: node.id,
-            side: 'input',
-            port: ingredientIndex,
-          }),
+    // Merge locally only when one consumer genuinely needs multiple producers.
+    const connectIntoConsumer = (
+      consumer: FlowPoint,
+      allocations: Allocation[],
+      materialId: string,
+    ) => {
+      const valid = allocations.filter((allocation) => allocation.fromEndpoint)
+      if (!valid.length) return
+
+      if (valid.length === 1) {
+        addBelt(
+          valid[0].fromEndpoint!,
+          consumer.endpoint,
+          valid[0].rate,
+          materialId,
         )
-        consumersByItem.set(ingredient.item, list)
-      })
+        return
+      }
+
+      const consumerPos = centerOfEndpoint(consumer.endpoint)
+
+      const mergeBatch = (
+        batch: Allocation[],
+        x: number,
+        y: number,
+      ): { endpoint: DesignerEndpoint; rate: number } | null => {
+        if (batch.length === 1) {
+          return {
+            endpoint: batch[0].fromEndpoint!,
+            rate: batch[0].rate,
+          }
+        }
+
+        const firstThree = batch.slice(0, 3)
+        const merger = addAutoUtilityNear('merger', x, y)
+        if (!merger) {
+          return {
+            endpoint: firstThree[0].fromEndpoint!,
+            rate: firstThree[0].rate,
+          }
+        }
+
+        firstThree.forEach((allocation, port) => {
+          addBelt(
+            allocation.fromEndpoint!,
+            { kind: 'utility', id: merger.id, side: 'input', port },
+            allocation.rate,
+            materialId,
+          )
+        })
+
+        const merged: Allocation = {
+          from: {
+            endpoint: {
+              kind: 'utility',
+              id: merger.id,
+              side: 'output',
+              port: 0,
+            },
+            rate: firstThree.reduce(
+              (sum, allocation) => sum + allocation.rate,
+              0,
+            ),
+          },
+          to: consumer,
+          rate: firstThree.reduce(
+            (sum, allocation) => sum + allocation.rate,
+            0,
+          ),
+          fromEndpoint: {
+            kind: 'utility',
+            id: merger.id,
+            side: 'output',
+            port: 0,
+          },
+        }
+
+        if (batch.length <= 3) {
+          return {
+            endpoint: merged.fromEndpoint!,
+            rate: merged.rate,
+          }
+        }
+
+        return mergeBatch(
+          [merged, ...batch.slice(3)],
+          x + 1,
+          y,
+        )
+      }
+
+      const producerAverageX =
+        valid.reduce(
+          (sum, allocation) => sum + centerOfEndpoint(allocation.fromEndpoint!).x,
+          0,
+        ) / valid.length
+
+      const merged = mergeBatch(
+        valid,
+        (producerAverageX + consumerPos.x) / 2,
+        consumerPos.y,
+      )
+
+      if (merged) {
+        addBelt(
+          merged.endpoint,
+          consumer.endpoint,
+          merged.rate,
+          materialId,
+        )
+      }
     }
 
-    const rateForItem = (itemId: string) => {
-      const resource = resources.find((entry) => entry.id === itemId)
-      if (resource) return resource.usedRate
-      return stepByItem.get(itemId)?.actualOutputRate ?? 0
-    }
-
-    for (const [itemId, consumers] of consumersByItem) {
-      const producers = producersByItem.get(itemId) ?? []
+    for (const [materialId, consumers] of consumersByItem) {
+      const producers = producersByItem.get(materialId) ?? []
       if (!producers.length || !consumers.length) continue
-      const rate = rateForItem(itemId)
-      const combined = combine(producers, rate, itemId)
-      if (combined) distribute(combined, consumers, rate, itemId)
+
+      const sortedProducers = [...producers].sort(
+        (a, b) => centerOfEndpoint(a.endpoint).y - centerOfEndpoint(b.endpoint).y,
+      )
+      const sortedConsumers = [...consumers].sort(
+        (a, b) => centerOfEndpoint(a.endpoint).y - centerOfEndpoint(b.endpoint).y,
+      )
+
+      const producerRemaining = sortedProducers.map((point) => point.rate)
+      const consumerRemaining = sortedConsumers.map((point) => point.rate)
+      const allocations: Allocation[] = []
+
+      let producerIndex = 0
+      let consumerIndex = 0
+      while (
+        producerIndex < sortedProducers.length &&
+        consumerIndex < sortedConsumers.length
+      ) {
+        const amount = Math.min(
+          producerRemaining[producerIndex],
+          consumerRemaining[consumerIndex],
+        )
+
+        if (amount > 0.0001) {
+          allocations.push({
+            from: sortedProducers[producerIndex],
+            to: sortedConsumers[consumerIndex],
+            rate: amount,
+          })
+          producerRemaining[producerIndex] -= amount
+          consumerRemaining[consumerIndex] -= amount
+        }
+
+        if (producerRemaining[producerIndex] <= 0.0001) producerIndex += 1
+        if (consumerRemaining[consumerIndex] <= 0.0001) consumerIndex += 1
+      }
+
+      const byProducer = new Map<string, Allocation[]>()
+      for (const allocation of allocations) {
+        const key = endpointObjectKey(allocation.from.endpoint)
+        const list = byProducer.get(key) ?? []
+        list.push(allocation)
+        byProducer.set(key, list)
+      }
+
+      for (const producer of sortedProducers) {
+        const group = byProducer.get(endpointObjectKey(producer.endpoint)) ?? []
+        if (group.length) buildSplitterOutputs(producer, group, materialId)
+      }
+
+      const byConsumer = new Map<string, Allocation[]>()
+      for (const allocation of allocations) {
+        const key = endpointObjectKey(allocation.to.endpoint)
+        const list = byConsumer.get(key) ?? []
+        list.push(allocation)
+        byConsumer.set(key, list)
+      }
+
+      for (const consumer of sortedConsumers) {
+        const group = byConsumer.get(endpointObjectKey(consumer.endpoint)) ?? []
+        if (group.length) connectIntoConsumer(consumer, group, materialId)
+      }
     }
 
     writeLayout(
@@ -1330,6 +1571,7 @@ export default function FactoryDesigner({
     const firstOnFloor = generatedNodes[0]
     setSelectedId(firstOnFloor?.id ?? null)
     setSelectedUtilityId(null)
+    setSelectedSourceId(null)
     setSelectedLiftId(null)
     setConnectFrom(null)
     setBeltToolActive(false)
