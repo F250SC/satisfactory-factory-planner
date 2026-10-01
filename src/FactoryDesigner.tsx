@@ -22,6 +22,7 @@ import {
   resourceMeta,
   type BeltTier,
   type MinerTier,
+  type Purity,
 } from './data'
 import {
   FOUNDATION_METERS,
@@ -3175,58 +3176,234 @@ export default function FactoryDesigner({
                   {lang === 'de' ? 'Maschine löschen' : 'Delete machine'}
                 </button>
               </>
-            ) : selectedSource ? (
-              <>
-                <div className="selection-inspector-head">
-                  <span className="eyebrow">
-                    {lang === 'de' ? 'Rohstoffquelle' : 'Resource source'}
-                  </span>
-                  <h2>
-                    {resourceMeta[selectedSource.resourceId]?.[lang] ??
-                      itemName(selectedSource.resourceId, lang)}
-                  </h2>
-                  <p>Miner Mk.{selectedSource.miner.slice(2)}</p>
-                </div>
+            ) : selectedSource && selectedResource ? (() => {
+              const config = selectedResource.config
+              const singleNodeOutput = resourceOutput(
+                selectedSource.resourceId,
+                { ...config, count: 1 },
+                clockControlUnlocked,
+              )
+              const maxMinerRank: Record<MinerTier, number> = {
+                mk1: 1,
+                mk2: 2,
+                mk3: 3,
+              }
+              const maxMiner: MinerTier =
+                tier >= 8 ? 'mk3' : tier >= 4 ? 'mk2' : 'mk1'
+              const minerOptions = (['mk1', 'mk2', 'mk3'] as MinerTier[]).filter(
+                (miner) => maxMinerRank[miner] <= maxMinerRank[maxMiner],
+              )
+              const maxClock = 100 + Math.max(0, Math.min(3, config.shards)) * 50
+              const purityLabel: Record<Purity, string> = {
+                impure: lang === 'de' ? 'Unrein' : 'Impure',
+                normal: lang === 'de' ? 'Normal' : 'Normal',
+                pure: lang === 'de' ? 'Rein' : 'Pure',
+              }
 
-                <div className="inspector-stat-grid">
-                  <div>
-                    <span>{lang === 'de' ? 'Förderrate' : 'Rate'}</span>
-                    <strong>{Math.round(selectedSource.rate * 100) / 100}/min</strong>
+              return (
+                <>
+                  <div className="selection-inspector-head">
+                    <span className="eyebrow">
+                      {lang === 'de' ? 'Rohstoffquelle' : 'Resource source'}
+                    </span>
+                    <h2>
+                      {resourceMeta[selectedSource.resourceId]?.[lang] ??
+                        itemName(selectedSource.resourceId, lang)}
+                    </h2>
+                    <p>
+                      Miner Mk.{config.miner.slice(2)}
+                      {' · '}
+                      {purityLabel[config.purity]}
+                    </p>
                   </div>
-                  <div>
-                    <span>{lang === 'de' ? 'Position' : 'Position'}</span>
-                    <strong>{selectedSource.x} / {selectedSource.y}</strong>
-                  </div>
-                </div>
 
-                <div className="belt-editor-section">
+                  <div className="inspector-stat-grid">
+                    <div>
+                      <span>
+                        {lang === 'de' ? 'Förderleistung' : 'Mine capacity'}
+                      </span>
+                      <strong>
+                        {Math.round(singleNodeOutput.available * 100) / 100}/min
+                      </strong>
+                    </div>
+                    <div>
+                      <span>
+                        {lang === 'de' ? 'Für Plan genutzt' : 'Used by plan'}
+                      </span>
+                      <strong>
+                        {Math.round(selectedSource.rate * 100) / 100}/min
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="source-editor-section">
+                    <label>
+                      {lang === 'de' ? 'Reinheit' : 'Purity'}
+                      <select
+                        value={config.purity}
+                        onChange={(e) =>
+                          updateSourceConfig(selectedSource.resourceId, {
+                            purity: e.target.value as Purity,
+                          })
+                        }
+                      >
+                        {(Object.keys(purityLabel) as Purity[]).map((purity) => (
+                          <option key={purity} value={purity}>
+                            {purityLabel[purity]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label>
+                      Miner
+                      <select
+                        value={config.miner}
+                        onChange={(e) =>
+                          updateSourceConfig(selectedSource.resourceId, {
+                            miner: e.target.value as MinerTier,
+                          })
+                        }
+                      >
+                        {minerOptions.map((miner) => (
+                          <option key={miner} value={miner}>
+                            Miner Mk.{miner.slice(2)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label>
+                      {lang === 'de' ? 'Abtransport' : 'Conveyor'}
+                      <select
+                        value={config.belt}
+                        onChange={(e) =>
+                          updateSourceConfig(selectedSource.resourceId, {
+                            belt: e.target.value as BeltTier,
+                          })
+                        }
+                      >
+                        {(Object.keys(beltRates) as BeltTier[])
+                          .filter(
+                            (belt) =>
+                              Number(belt.slice(2)) <=
+                              Number(maxBeltTier.slice(2)),
+                          )
+                          .map((belt) => (
+                            <option key={belt} value={belt}>
+                              Mk.{belt.slice(2)} · {beltRates[belt]}/min
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+
+                    <div className="source-clock-editor">
+                      <span className="eyebrow">
+                        {lang === 'de' ? 'Taktsteuerung' : 'Clock speed'}
+                      </span>
+                      {!clockControlUnlocked ? (
+                        <div className="locked-source-clock">
+                          <strong>100 %</strong>
+                          <small>
+                            {lang === 'de'
+                              ? 'Noch nicht erforscht'
+                              : 'Not researched yet'}
+                          </small>
+                        </div>
+                      ) : (
+                        <>
+                          <label>
+                            Power Shards
+                            <select
+                              value={config.shards}
+                              onChange={(e) => {
+                                const shards = Number(e.target.value)
+                                updateSourceConfig(selectedSource.resourceId, {
+                                  shards,
+                                  clockSpeed: Math.min(
+                                    config.clockSpeed,
+                                    100 + shards * 50,
+                                  ),
+                                })
+                              }}
+                            >
+                              {[0, 1, 2, 3].map((shards) => (
+                                <option key={shards} value={shards}>
+                                  {shards} · max. {100 + shards * 50} %
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label>
+                            {lang === 'de' ? 'Taktrate' : 'Clock speed'}
+                            <div className="clock-input-row">
+                              <input
+                                type="number"
+                                min="1"
+                                max={maxClock}
+                                step="0.01"
+                                value={config.clockSpeed}
+                                onChange={(e) =>
+                                  updateSourceConfig(selectedSource.resourceId, {
+                                    clockSpeed: Math.max(
+                                      1,
+                                      Math.min(
+                                        maxClock,
+                                        Number(e.target.value) || 100,
+                                      ),
+                                    ),
+                                  })
+                                }
+                              />
+                              <span>%</span>
+                            </div>
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {singleNodeOutput.transportLimited && (
+                    <div className="designer-error source-limit-warning">
+                      <AlertTriangle size={15} />
+                      {lang === 'de'
+                        ? 'Die Mine könnte mehr fördern, wird aber vom gewählten Förderband begrenzt.'
+                        : 'The miner could produce more, but the selected conveyor limits throughput.'}
+                    </div>
+                  )}
+
+                  <div className="belt-editor-section">
+                    <button
+                      className="action-button"
+                      onClick={() => {
+                        setBeltToolActive(true)
+                        setConnectFrom({
+                          kind: 'source',
+                          id: selectedSource.id,
+                          side: 'output',
+                          port: 0,
+                        })
+                        setPlacementError(null)
+                      }}
+                    >
+                      <Unplug size={15} />
+                      {lang === 'de' ? 'Verbindung starten' : 'Start connection'}
+                    </button>
+                  </div>
+
                   <button
-                    className="action-button"
-                    onClick={() => {
-                      setBeltToolActive(true)
-                      setConnectFrom({
-                        kind: 'source',
-                        id: selectedSource.id,
-                        side: 'output',
-                        port: 0,
-                      })
-                      setPlacementError(null)
-                    }}
+                    className="action-button danger inspector-delete"
+                    onClick={() => removeSource(selectedSource.id)}
                   >
-                    <Unplug size={15} />
-                    {lang === 'de' ? 'Verbindung starten' : 'Start connection'}
+                    <Trash2 size={15} />
+                    {lang === 'de'
+                      ? 'Rohstoffquelle löschen'
+                      : 'Delete source'}
                   </button>
-                </div>
-
-                <button
-                  className="action-button danger inspector-delete"
-                  onClick={() => removeSource(selectedSource.id)}
-                >
-                  <Trash2 size={15} />
-                  {lang === 'de' ? 'Rohstoffquelle löschen' : 'Delete source'}
-                </button>
-              </>
-            ) : selectedUtility ? (
+                </>
+              )
+            })() : selectedUtility ? (
               <>
                 <div className="selection-inspector-head">
                   <span className="eyebrow">
