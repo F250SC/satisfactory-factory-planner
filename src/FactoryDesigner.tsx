@@ -3392,10 +3392,18 @@ export default function FactoryDesigner({
                     </p>
                   </div>
 
-                  <div className="inspector-stat-grid">
+                  <div className="inspector-stat-grid source-rate-grid">
                     <div>
                       <span>
-                        {lang === 'de' ? 'Förderleistung' : 'Mine capacity'}
+                        {lang === 'de' ? 'Mine erzeugt' : 'Miner output'}
+                      </span>
+                      <strong>
+                        {Math.round(singleNodeOutput.extracted * 100) / 100}/min
+                      </strong>
+                    </div>
+                    <div>
+                      <span>
+                        {lang === 'de' ? 'Über Belt nutzbar' : 'Usable via belt'}
                       </span>
                       <strong>
                         {Math.round(singleNodeOutput.available * 100) / 100}/min
