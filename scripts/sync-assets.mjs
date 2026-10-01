@@ -37,18 +37,57 @@ let downloaded = 0
 
 async function download(id) {
   const url = `${sourceBase}/${id}.png`
-  const response = await fetch(url, {
-    headers: { 'User-Agent': 'F250SC/satisfactory-factory-planner' },
-  })
 
-  if (!response.ok) {
-    missing.push(id)
-    return
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'F250SC/satisfactory-factory-planner' },
+      })
+
+      if (response.status === 404) {
+        missing.push(id)
+        return
+      }
+
+      if (!response.ok) {
+        if (attempt === 3) {
+          missing.push(id)
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempt * 250))
+        continue
+      }
+
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!contentType.includes('image')) {
+        if (attempt === 3) {
+          missing.push(id)
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempt * 250))
+        continue
+      }
+
+      const bytes = Buffer.from(await response.arrayBuffer())
+      if (!bytes.length) {
+        if (attempt === 3) {
+          missing.push(id)
+          return
+        }
+        continue
+      }
+
+      await fs.writeFile(path.join(outDir, `${id}.png`), bytes)
+      downloaded += 1
+      return
+    } catch {
+      if (attempt === 3) {
+        missing.push(id)
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt * 250))
+    }
   }
-
-  const bytes = Buffer.from(await response.arrayBuffer())
-  await fs.writeFile(path.join(outDir, `${id}.png`), bytes)
-  downloaded += 1
 }
 
 const list = [...ids]
