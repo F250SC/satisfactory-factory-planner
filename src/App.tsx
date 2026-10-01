@@ -46,6 +46,7 @@ import {
   eligibleAlternates,
   type ProgressionProfile,
 } from './progression'
+import FactoryDesigner, { type DesignerLayout } from './FactoryDesigner'
 import {
   formatProfileDate,
   loadActiveProfileId,
@@ -432,6 +433,8 @@ export default function App() {
   const [clockControlUnlocked, setClockControlUnlocked] = useState(false)
   const [productionShards, setProductionShards] = useState(0)
   const [resourceConfigs, setResourceConfigs] = useState<Record<string, ResourceConfig>>({})
+  const [designerLayout, setDesignerLayout] = useState<DesignerLayout>({ nodes: [] })
+  const [activeView, setActiveView] = useState<'planner' | 'designer'>('planner')
   const [profiles, setProfiles] = useState<SavedProfile[]>(() => loadProfiles())
   const [activeProfileId, setActiveProfileId] = useState<string | null>(() => loadActiveProfileId())
   const [newProfileName, setNewProfileName] = useState('')
@@ -447,6 +450,7 @@ export default function App() {
     clockControlUnlocked,
     productionShards,
     resourceConfigs,
+    designerLayout,
   })
 
   const applySnapshot = (snapshot: PlannerSnapshot) => {
@@ -457,6 +461,7 @@ export default function App() {
     setClockControlUnlocked(Boolean(snapshot.clockControlUnlocked))
     setProductionShards(snapshot.productionShards ?? 0)
     setResourceConfigs(snapshot.resourceConfigs ?? {})
+    setDesignerLayout(snapshot.designerLayout ?? { nodes: [] })
   }
 
   useEffect(() => {
@@ -478,7 +483,7 @@ export default function App() {
       : profile)
     setProfiles(updated)
     persistProfiles(updated)
-  }, [target, overrides, tier, unlockedAlternates, clockControlUnlocked, productionShards, resourceConfigs, profileHydrated, activeProfileId])
+  }, [target, overrides, tier, unlockedAlternates, clockControlUnlocked, productionShards, resourceConfigs, designerLayout, profileHydrated, activeProfileId])
 
   const createProfile = () => {
     const profile = makeProfile(newProfileName, currentSnapshot())
@@ -628,11 +633,17 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.9</div>
+          <div className="version">v0.10</div>
         </div>
       </header>
 
       <div className="shell">
+        <nav className="main-tabs">
+          <button className={activeView === 'planner' ? 'active' : ''} onClick={() => setActiveView('planner')}>Produktionsplaner</button>
+          <button className={activeView === 'designer' ? 'active' : ''} onClick={() => setActiveView('designer')}>Factory Designer</button>
+        </nav>
+
+        {activeView === 'planner' ? <>
         <section className="hero">
           <span className="eyebrow">{t.planner}</span>
           <h1>{t.hero}</h1>
@@ -846,8 +857,11 @@ export default function App() {
 
         <section className="next-card">
           <span className="eyebrow">{t.coming}</span><h2>{t.designer}</h2><p>{t.designerText}</p>
-          <div className="mock-grid"><div className="mock-machine">Foundry</div><div className="mock-belt">→</div><div className="mock-machine small">Storage</div></div>
+          <button className="action-button primary" onClick={() => setActiveView('designer')}>Factory Designer öffnen</button>
         </section>
+        </> : (
+          <FactoryDesigner lang={lang} steps={result.machineSteps} layout={designerLayout} onChange={setDesignerLayout} />
+        )}
       </div>
     </main>
   )
