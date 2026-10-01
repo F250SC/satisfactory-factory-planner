@@ -1499,6 +1499,76 @@ export default function FactoryDesigner({
     )
   }
 
+
+  const setZoomAround = (nextZoom: number, clientX?: number, clientY?: number) => {
+    const viewport = viewportRef.current
+    const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nextZoom))
+    if (!viewport || clientX == null || clientY == null) {
+      setZoom(clamped)
+      return
+    }
+
+    const rect = viewport.getBoundingClientRect()
+    const localX = clientX - rect.left
+    const localY = clientY - rect.top
+    const worldX = (localX - pan.x) / zoom
+    const worldY = (localY - pan.y) / zoom
+
+    setPan({
+      x: localX - worldX * clamped,
+      y: localY - worldY * clamped,
+    })
+    setZoom(clamped)
+  }
+
+  const fitView = () => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+
+    const rects = [
+      ...activeNodes.map(rectFor),
+      ...activeSources.map(sourceRect),
+      ...activeUtilities.map(utilityRect),
+      ...floorLifts.map((lift) => ({
+        left: lift.x * FOUNDATION_METERS,
+        top: lift.y * FOUNDATION_METERS,
+        right: lift.x * FOUNDATION_METERS + FOUNDATION_METERS,
+        bottom: lift.y * FOUNDATION_METERS + FOUNDATION_METERS,
+      })),
+    ]
+
+    if (!rects.length) {
+      setZoom(0.8)
+      setPan({ x: 48, y: 48 })
+      return
+    }
+
+    const minX = Math.min(...rects.map((rect) => rect.left)) * PIXELS_PER_METER
+    const minY = Math.min(...rects.map((rect) => rect.top)) * PIXELS_PER_METER
+    const maxX = Math.max(...rects.map((rect) => rect.right)) * PIXELS_PER_METER
+    const maxY = Math.max(...rects.map((rect) => rect.bottom)) * PIXELS_PER_METER
+    const contentW = Math.max(CELL_PX, maxX - minX)
+    const contentH = Math.max(CELL_PX, maxY - minY)
+    const padding = 80
+
+    const nextZoom = Math.max(
+      MIN_ZOOM,
+      Math.min(
+        1.25,
+        (viewport.clientWidth - padding * 2) / contentW,
+        (viewport.clientHeight - padding * 2) / contentH,
+      ),
+    )
+
+    setZoom(nextZoom)
+    setPan({
+      x: (viewport.clientWidth - contentW * nextZoom) / 2 - minX * nextZoom,
+      y: (viewport.clientHeight - contentH * nextZoom) / 2 - minY * nextZoom,
+    })
+  }
+
+  const zoomLabel = `${Math.round(zoom * 100)}%`
+
   return (
     <section className="designer-page">
       <div className="floor-tabs">
