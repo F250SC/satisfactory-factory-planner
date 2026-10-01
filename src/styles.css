@@ -1179,3 +1179,15 @@ select:focus, input:focus { border-color: #f28c28; }
   border-color: #f28c28;
   box-shadow: 0 0 0 3px rgba(242,140,40,.22);
 }
+
+
+/* v0.14.2 explicit conveyor placement mode */
+.conveyor-tool-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+.action-button.tool-active {
+  border-color: #f28c28;
+  background: #2b1d10;
+  color: #ffc078;
+  box-shadow: 0 0 0 2px rgba(242,140,40,.12);
+}
