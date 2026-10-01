@@ -1,5 +1,6 @@
 import gameData from './gameData.json'
 import deTranslations from './deTranslations.json'
+import deRecipeTranslations from './deRecipeTranslations.json'
 
 export type Purity = 'impure' | 'normal' | 'pure'
 export type MinerTier = 'mk1' | 'mk2' | 'mk3'
@@ -119,6 +120,14 @@ export function machineIconUrl(id: string) {
   const name = buildings[id]?.name
   if (!name) return null
   return `https://satisfactory.wiki.gg/wiki/Special:Redirect/file/${encodeURIComponent(name)}.png`
+}
+
+export function recipeName(recipe: GameRecipe, lang: 'de' | 'en' = 'en') {
+  if (lang === 'de') {
+    return (deRecipeTranslations as Record<string, string>)[recipe.className]
+      ?? recipe.name.replace(/^Alternate:\s*/i, 'Alternativ: ')
+  }
+  return recipe.name
 }
 
 export function recipesForProduct(itemId: string) {
