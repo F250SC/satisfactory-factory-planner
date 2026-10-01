@@ -3364,7 +3364,10 @@ export default function FactoryDesigner({
                         (entry) => (entry.to.port ?? 0) === input.port,
                       )
                       const incomingRate = belt
-                        ? flowForBelt(belt)
+                        ? Math.min(
+                            flowForBelt(belt),
+                            beltRates[belt.tier],
+                          )
                         : 0
                       const usedRate = Math.min(incomingRate, input.rate)
                       const surplus = Math.max(0, incomingRate - input.rate)
