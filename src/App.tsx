@@ -548,7 +548,7 @@ export default function App() {
     const recipe = availableRecipesForProduct(nextTarget, progressionProfile)[0]
     setTarget(nextTarget)
     setOverrides(recipe ? { [nextTarget]: recipe.className } : {})
-  }, [tier, unlockedAlternates])
+  }, [target, unlockedTargets, progressionProfile])
 
   const availability = useMemo(() => {
     const result: Record<string, number> = {}
@@ -560,6 +560,19 @@ export default function App() {
     () => calculateProduction(target, availability, clockControlUnlocked, productionShards, progressionOverrides),
     [target, availability, clockControlUnlocked, productionShards, progressionOverrides],
   )
+
+  useEffect(() => {
+    setResourceConfigs((current) => {
+      let changed = false
+      const next = { ...current }
+      for (const resource of firstPass.requiredResources) {
+        if (next[resource]) continue
+        next[resource] = initialConfig()
+        changed = true
+      }
+      return changed ? next : current
+    })
+  }, [firstPass.requiredResources])
 
   const ensuredConfigs = useMemo(() => {
     const next = { ...resourceConfigs }
