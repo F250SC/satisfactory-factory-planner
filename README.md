@@ -4,7 +4,7 @@ A resource-first production planner for **Satisfactory**.
 
 Instead of starting with a desired output rate, the planner starts with the resource nodes, extractors and transport technology you actually have and calculates what production is possible.
 
-## v0.4
+## v0.5
 
 - Complete automatable production dataset: **276 machine recipes**
 - Standard and alternate recipes
@@ -25,6 +25,10 @@ Instead of starting with a desired output rate, the planner starts with the reso
 - Resource extractors/miners can be clocked independently once the research is unlocked
 - Exact final-machine underclocking where needed, stored/displayed up to four decimal places
 - Per-stage in-game clock setup (for example 1×100% + 1×33.3333%)
+- Separate theoretical resource maximum and practically buildable output
+- When clock control is locked, production is solved with whole machines fixed at 100%
+- Full upstream consumption is propagated after machine rounding, so impossible rounded-up plans are rejected
+- Intermediate overproduction is shown explicitly
 - Original Satisfactory item imagery in the planner and machine imagery where available
 - Expanded German item/recipe translations with English fallback
 - Estimated power calculation using Satisfactory's production-machine clock exponent
