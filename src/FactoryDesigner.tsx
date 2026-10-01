@@ -11,14 +11,22 @@ import {
   Unplug,
   WandSparkles,
 } from 'lucide-react'
-import { beltRates, itemName, machineIconUrl, type BeltTier } from './data'
+import {
+  beltRates,
+  extractorIconUrl,
+  itemName,
+  machineIconUrl,
+  resourceMeta,
+  type BeltTier,
+  type MinerTier,
+} from './data'
 import {
   FOUNDATION_METERS,
   PIXELS_PER_METER,
   footprintFor,
   rotatedFootprint,
 } from './buildingFootprints'
-import type { MachineStep } from './engine'
+import type { MachineStep, ResourceConfig } from './engine'
 
 export interface DesignerFloor {
   id: string
@@ -34,6 +42,16 @@ export interface DesignerNode {
   y: number
   floorId?: string
   rotation: 0 | 90 | 180 | 270
+}
+
+export interface DesignerSource {
+  id: string
+  resourceId: string
+  miner: MinerTier
+  rate: number
+  x: number
+  y: number
+  floorId: string
 }
 
 export interface DesignerUtility {
@@ -54,7 +72,7 @@ export interface DesignerLift {
 }
 
 export interface DesignerEndpoint {
-  kind: 'node' | 'utility'
+  kind: 'node' | 'utility' | 'source'
   id: string
   side?: 'input' | 'output'
   port?: number
@@ -71,14 +89,23 @@ export interface DesignerBelt {
 export interface DesignerLayout {
   floors?: DesignerFloor[]
   nodes: DesignerNode[]
+  sources?: DesignerSource[]
   utilities?: DesignerUtility[]
   lifts?: DesignerLift[]
   belts?: DesignerBelt[]
 }
 
+interface PlannerResource {
+  id: string
+  config: ResourceConfig
+  usedRate: number
+}
+
 interface Props {
   lang: 'de' | 'en'
   steps: MachineStep[]
+  resources: PlannerResource[]
+  maxBeltTier: BeltTier
   layout: DesignerLayout
   onChange: (layout: DesignerLayout) => void
 }
@@ -134,6 +161,7 @@ function normalizeLayout(layout: DesignerLayout): Required<DesignerLayout> {
       ...node,
       floorId: node.floorId ?? groundId,
     })),
+    sources: layout.sources ?? [],
     utilities: layout.utilities ?? [],
     lifts: layout.lifts ?? [],
     belts: (layout.belts ?? []).map((belt) => ({
@@ -151,6 +179,15 @@ function rectFor(node: DesignerNode) {
     top: node.y * FOUNDATION_METERS,
     right: node.x * FOUNDATION_METERS + size.widthM,
     bottom: node.y * FOUNDATION_METERS + size.lengthM,
+  }
+}
+
+function sourceRect(source: DesignerSource) {
+  return {
+    left: source.x * FOUNDATION_METERS,
+    top: source.y * FOUNDATION_METERS,
+    right: source.x * FOUNDATION_METERS + FOUNDATION_METERS,
+    bottom: source.y * FOUNDATION_METERS + FOUNDATION_METERS,
   }
 }
 
@@ -274,7 +311,14 @@ function orthogonalPath(from: PortPoint, to: PortPoint) {
   }
 }
 
-export default function FactoryDesigner({ lang, steps, layout, onChange }: Props) {
+export default function FactoryDesigner({
+  lang,
+  steps,
+  resources,
+  maxBeltTier,
+  layout,
+  onChange,
+}: Props) {
   const normalized = normalizeLayout(layout)
   const [activeFloorId, setActiveFloorId] = useState(normalized.floors[0].id)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -300,6 +344,9 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
 
   const activeNodes = normalized.nodes.filter(
     (node) => (node.floorId ?? normalized.floors[0].id) === activeFloor.id,
+  )
+  const activeSources = normalized.sources.filter(
+    (source) => source.floorId === activeFloor.id,
   )
   const activeUtilities = normalized.utilities.filter(
     (utility) => utility.floorId === activeFloor.id,
@@ -333,8 +380,9 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
     lifts = normalized.lifts,
     utilities = normalized.utilities,
     belts = normalized.belts,
+    sources = normalized.sources,
   ) => {
-    onChange({ nodes, floors, lifts, utilities, belts })
+    onChange({ nodes, floors, lifts, utilities, belts, sources })
   }
 
   const stepForNode = (nodeId: string) => {
