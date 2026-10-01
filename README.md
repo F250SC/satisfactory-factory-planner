@@ -4,7 +4,7 @@ A resource-first production planner for **Satisfactory**.
 
 Instead of starting with a desired output rate, the planner starts with the resource nodes, extractors and transport technology you actually have and calculates what production is possible.
 
-## v0.9
+## v0.10
 
 - Complete automatable production dataset: **276 machine recipes**
 - Standard and alternate recipes
@@ -40,6 +40,14 @@ Instead of starting with a desired output rate, the planner starts with the reso
 - Named browser save profiles
 - Automatic local save of planner settings per profile
 - Profile switching preserves target, recipes, tier, alternates, clock settings and resource-node configuration
+- Interactive Factory Designer tab
+- Foundation grid with snap-to-cell placement
+- Add machines from the current production chain
+- Generate a starter layout from the current production plan
+- Drag machines between grid cells
+- Rotate machines in 90° steps
+- Delete and select machines
+- Factory layout is saved inside the active browser profile
 
 ## Clock-speed model
 
