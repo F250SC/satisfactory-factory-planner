@@ -633,7 +633,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.14.4</div>
+          <div className="version">v0.15</div>
         </div>
       </header>
 
@@ -860,7 +860,18 @@ export default function App() {
           <button className="action-button primary" onClick={() => setActiveView('designer')}>Factory Designer öffnen</button>
         </section>
         </> : (
-          <FactoryDesigner lang={lang} steps={result.machineSteps} layout={designerLayout} onChange={setDesignerLayout} />
+          <FactoryDesigner
+            lang={lang}
+            steps={result.machineSteps}
+            resources={result.requiredResources.map((id) => ({
+              id,
+              config: configForTier(ensuredConfigs[id] ?? initialConfig(), tier),
+              usedRate: result.rawUsed[id] ?? 0,
+            }))}
+            maxBeltTier={tier >= 9 ? 'mk6' : tier >= 7 ? 'mk5' : tier >= 5 ? 'mk4' : tier >= 4 ? 'mk3' : tier >= 2 ? 'mk2' : 'mk1'}
+            layout={designerLayout}
+            onChange={setDesignerLayout}
+          />
         )}
       </div>
     </main>
