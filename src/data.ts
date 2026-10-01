@@ -110,16 +110,34 @@ export function itemName(id: string, lang: 'de' | 'en' = 'en') {
   return items[id]?.name ?? id.replace(/^Desc_/, '').replace(/_C$/, '')
 }
 
+export function gameAssetUrl(id: string) {
+  return `/assets/game/${id}.png`
+}
+
 export function itemIconUrl(id: string) {
-  const icon = items[id]?.icon
-  if (!icon) return null
-  return `https://raw.githubusercontent.com/ShortByte/satisfactory-workbench/develop/public/icons/items/${icon}.png`
+  if (!items[id] && !resourceMeta[id]) return null
+  return gameAssetUrl(id)
 }
 
 export function machineIconUrl(id: string) {
-  const name = buildings[id]?.name
-  if (!name) return null
-  return `https://satisfactory.wiki.gg/wiki/Special:Redirect/file/${encodeURIComponent(name)}.png`
+  if (!buildings[id]) return null
+  return gameAssetUrl(id)
+}
+
+export function extractorIconUrl(kind: ResourceKind, miner?: MinerTier) {
+  if (kind === 'solid') {
+    const id =
+      miner === 'mk2'
+        ? 'Desc_MinerMk2_C'
+        : miner === 'mk3'
+          ? 'Desc_MinerMk3_C'
+          : 'Desc_MinerMk1_C'
+    return gameAssetUrl(id)
+  }
+  if (kind === 'oil') return gameAssetUrl('Desc_OilPump_C')
+  if (kind === 'water') return gameAssetUrl('Desc_WaterPump_C')
+  if (kind === 'nitrogen') return gameAssetUrl('Desc_FrackingExtractor_C')
+  return null
 }
 
 export function recipeName(recipe: GameRecipe, lang: 'de' | 'en' = 'en') {
