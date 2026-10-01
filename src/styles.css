@@ -1232,3 +1232,37 @@ select:focus, input:focus { border-color: #f28c28; }
   opacity: 1 !important;
   pointer-events: auto;
 }
+
+
+/* v0.15 generated resource sources and starter factory */
+.factory-source {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  padding: 5px;
+  overflow: visible;
+  border: 1px solid #7b6930;
+  border-radius: 9px;
+  background: rgba(36, 31, 18, .96);
+  color: #e7d18c;
+}
+.factory-source:hover,
+.factory-source.selected {
+  border-color: #f2b84b;
+  box-shadow: 0 0 0 2px rgba(242,184,75,.2);
+}
+.factory-source img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+.factory-source small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8px;
+  color: #c4b47d;
+}
