@@ -24,6 +24,7 @@ import {
   type MinerTier,
   type Purity,
 } from './data'
+import { maxMinerForTier, unlockedBelts, unlockedMiners } from './technology'
 import {
   FOUNDATION_METERS,
   PIXELS_PER_METER,
@@ -95,6 +96,7 @@ export interface DesignerBelt {
   to: DesignerEndpoint
   tier: BeltTier
   materialId?: string
+  plannedRate?: number
   waypoints?: DesignerBeltWaypoint[]
   routeStyle?: 'straight' | 'orthogonal' | 'smooth'
 }
@@ -1451,6 +1453,7 @@ export default function FactoryDesigner({
         to,
         tier: beltTierFor(rate),
         materialId,
+        plannedRate: rate,
       })
     }
 
@@ -3400,16 +3403,7 @@ export default function FactoryDesigner({
                 { ...config, count: 1 },
                 clockControlUnlocked,
               )
-              const maxMinerRank: Record<MinerTier, number> = {
-                mk1: 1,
-                mk2: 2,
-                mk3: 3,
-              }
-              const maxMiner: MinerTier =
-                tier >= 8 ? 'mk3' : tier >= 4 ? 'mk2' : 'mk1'
-              const minerOptions = (['mk1', 'mk2', 'mk3'] as MinerTier[]).filter(
-                (miner) => maxMinerRank[miner] <= maxMinerRank[maxMiner],
-              )
+              const minerOptions = unlockedMiners(tier)
               const maxClock = 100 + Math.max(0, Math.min(3, config.shards)) * 50
               const purityLabel: Record<Purity, string> = {
                 impure: lang === 'de' ? 'Unrein' : 'Impure',
