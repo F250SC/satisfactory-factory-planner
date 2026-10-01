@@ -939,6 +939,15 @@ export default function FactoryDesigner({
     const sourceOccupied = (x: number, y: number) =>
       generatedSources.some((source) => source.x === x && source.y === y)
 
+    const nextSourceSpot = () => {
+      for (let x = 0; x < 2; x += 1) {
+        for (let y = 0; y < GRID_H; y += 1) {
+          if (!sourceOccupied(x, y)) return { x, y }
+        }
+      }
+      return null
+    }
+
     const nodeFitsLocal = (candidate: DesignerNode) => {
       const rect = rectFor(candidate)
       if (
@@ -1007,15 +1016,15 @@ export default function FactoryDesigner({
       const count = Math.max(1, resource.config.count || 1)
       const perSource = resource.usedRate / count
       for (let i = 0; i < count; i += 1) {
-        let y = (r * 2 + i) % GRID_H
-        while (sourceOccupied(0, y)) y = (y + 1) % GRID_H
+        const spot = nextSourceSpot()
+        if (!spot) break
         generatedSources.push({
           id: `source-${resource.id}-${i}-${Date.now()}`,
           resourceId: resource.id,
           miner: resource.config.miner,
           rate: perSource,
-          x: 0,
-          y,
+          x: spot.x,
+          y: spot.y,
           floorId: activeFloor.id,
         })
       }
