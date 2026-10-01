@@ -2150,6 +2150,12 @@ export default function FactoryDesigner({
   const selectedLift =
     normalized.lifts.find((lift) => lift.id === selectedLiftId) ?? null
   const selectedFootprint = selected ? footprintFor(selected.machineId) : null
+  const selectedStep = selected ? stepForNode(selected.id) : null
+  const selectedClock = selected ? machineClockForNode(selected.id) : 100
+  const selectedInputs = selected ? machineInputRates(selected.id) : []
+  const selectedOutputs = selected ? machineOutputRates(selected.id) : []
+  const selectedOutgoingBelts = selected ? outgoingBeltsFor('node', selected.id) : []
+  const selectedIncomingBelts = selected ? incomingBeltsFor('node', selected.id) : []
   const selectedBelt =
     normalized.belts.find((belt) => belt.id === selectedBeltId) ?? null
   const hasSelection = Boolean(
@@ -3202,7 +3208,7 @@ export default function FactoryDesigner({
 
         {hasSelection && (
           <aside className="selection-inspector card">
-            {selected && selectedFootprint ? (
+            {selected && selectedFootprint && selectedStep ? (
               <>
                 <div className="selection-inspector-head">
                   <span className="eyebrow">
@@ -3212,17 +3218,92 @@ export default function FactoryDesigner({
                   <p>{itemName(selected.itemId, lang)}</p>
                 </div>
 
+                <div className="machine-flow-section">
+                  <span className="eyebrow">
+                    {lang === 'de' ? 'Eingänge' : 'Inputs'}
+                  </span>
+                  <div className="machine-flow-list">
+                    {selectedInputs.map((input) => {
+                      const belt = selectedIncomingBelts.find(
+                        (entry) => (entry.to.port ?? 0) === input.port,
+                      )
+                      return (
+                        <div className="machine-flow-row" key={`in-${input.port}`}>
+                          <div>
+                            <strong>{itemName(input.item, lang)}</strong>
+                            <small>{Math.round(input.rate * 100) / 100}/min</small>
+                          </div>
+                          <span>
+                            {belt
+                              ? `Mk.${belt.tier.slice(2)} · ${beltRates[belt.tier]}/min`
+                              : (lang === 'de' ? 'Nicht verbunden' : 'Not connected')}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="machine-flow-section">
+                  <span className="eyebrow">
+                    {lang === 'de' ? 'Ausgänge' : 'Outputs'}
+                  </span>
+                  <div className="machine-flow-list">
+                    {selectedOutputs.map((output) => {
+                      const belt = selectedOutgoingBelts.find(
+                        (entry) => (entry.from.port ?? 0) === output.port,
+                      )
+                      return (
+                        <div className="machine-flow-row" key={`out-${output.port}`}>
+                          <div>
+                            <strong>{itemName(output.item, lang)}</strong>
+                            <small>{Math.round(output.rate * 100) / 100}/min</small>
+                          </div>
+                          {belt ? (
+                            <select
+                              value={belt.tier}
+                              onChange={(e) =>
+                                updateBelt(belt.id, {
+                                  tier: e.target.value as BeltTier,
+                                })
+                              }
+                            >
+                              {(Object.keys(beltRates) as BeltTier[])
+                                .filter(
+                                  (tier) =>
+                                    Number(tier.slice(2)) <=
+                                    Number(maxBeltTier.slice(2)),
+                                )
+                                .map((tier) => (
+                                  <option key={tier} value={tier}>
+                                    Mk.{tier.slice(2)} · {beltRates[tier]}/min
+                                  </option>
+                                ))}
+                            </select>
+                          ) : (
+                            <span>
+                              {lang === 'de' ? 'Nicht verbunden' : 'Not connected'}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 <div className="inspector-stat-grid">
                   <div>
-                    <span>Ports</span>
-                    <strong>
-                      {portCounts({ kind: 'node', id: selected.id }).input} In ·{' '}
-                      {portCounts({ kind: 'node', id: selected.id }).output} Out
-                    </strong>
+                    <span>{lang === 'de' ? 'Taktrate' : 'Clock speed'}</span>
+                    <strong>{Math.round(selectedClock * 10000) / 10000}%</strong>
                   </div>
                   <div>
-                    <span>{lang === 'de' ? 'Rotation' : 'Rotation'}</span>
-                    <strong>{selected.rotation}°</strong>
+                    <span>{lang === 'de' ? 'Leistung' : 'Power'}</span>
+                    <strong>
+                      {Math.round(
+                        (selectedStep.totalPowerMW / Math.max(1, selectedStep.machines)) * 100,
+                      ) / 100}{' '}
+                      MW
+                    </strong>
                   </div>
                   <div>
                     <span>{lang === 'de' ? 'Grundfläche' : 'Footprint'}</span>
@@ -3231,8 +3312,8 @@ export default function FactoryDesigner({
                     </strong>
                   </div>
                   <div>
-                    <span>{lang === 'de' ? 'Höhe' : 'Height'}</span>
-                    <strong>{selectedFootprint.heightM} m</strong>
+                    <span>{lang === 'de' ? 'Rotation' : 'Rotation'}</span>
+                    <strong>{selected.rotation}°</strong>
                   </div>
                 </div>
 
@@ -3367,29 +3448,7 @@ export default function FactoryDesigner({
                       </select>
                     </label>
 
-                    <label>
-                      {lang === 'de' ? 'Abtransport' : 'Conveyor'}
-                      <select
-                        value={config.belt}
-                        onChange={(e) =>
-                          updateSourceConfig(selectedSource.resourceId, {
-                            belt: e.target.value as BeltTier,
-                          })
-                        }
-                      >
-                        {(Object.keys(beltRates) as BeltTier[])
-                          .filter(
-                            (belt) =>
-                              Number(belt.slice(2)) <=
-                              Number(maxBeltTier.slice(2)),
-                          )
-                          .map((belt) => (
-                            <option key={belt} value={belt}>
-                              Mk.{belt.slice(2)} · {beltRates[belt]}/min
-                            </option>
-                          ))}
-                      </select>
-                    </label>
+
 
                     <div className="source-clock-editor">
                       <span className="eyebrow">
