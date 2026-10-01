@@ -832,3 +832,69 @@ select:focus, input:focus { border-color: #f28c28; }
     grid-template-columns: 1fr;
   }
 }
+
+
+/* v0.11 real footprints and collision handling */
+.factory-grid {
+  flex: 0 0 auto;
+}
+.factory-node {
+  position: absolute;
+  z-index: 5;
+  padding: 4px;
+  border: 1px solid #6c4c28;
+  border-radius: 8px;
+  background: rgba(25,33,43,.96);
+  color: #dce5ef;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.factory-node img {
+  width: min(70%, 54px);
+  height: min(70%, 54px);
+  object-fit: contain;
+}
+.designer-error {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #7c3f2c;
+  border-radius: 9px;
+  background: #2a1712;
+  color: #f1a27f;
+  font-size: 12px;
+}
+.footprint-info {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #2f3946;
+  border-radius: 10px;
+  background: #10161d;
+}
+.footprint-info span,
+.footprint-info strong,
+.footprint-info small {
+  display: block;
+}
+.footprint-info span {
+  color: #7f8c9a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.footprint-info strong {
+  margin-top: 3px;
+}
+.footprint-info small {
+  margin-top: 3px;
+  color: #74808d;
+}
+.designer-toolbar small {
+  display: block;
+  margin-top: 5px;
+  color: #74808d;
+}
