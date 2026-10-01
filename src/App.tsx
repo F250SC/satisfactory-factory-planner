@@ -226,12 +226,14 @@ function ResourceCard({
   config,
   lang,
   clockControlUnlocked,
+  tier,
   onChange,
 }: {
   resourceId: string
   config: ResourceConfig
   lang: Lang
   clockControlUnlocked: boolean
+  tier: number
   onChange: (config: ResourceConfig) => void
 }) {
   const t = ui[lang]
@@ -239,6 +241,17 @@ function ResourceCard({
   const rate = resourceOutput(resourceId, config, clockControlUnlocked)
   const isManual = !meta
   const maxClock = 100 + config.shards * 50
+  const minerOptions: MinerTier[] = tier >= 8 ? ['mk1','mk2','mk3'] : tier >= 4 ? ['mk1','mk2'] : ['mk1']
+  const beltOptions: BeltTier[] = tier >= 7
+    ? ['mk1','mk2','mk3','mk4','mk5']
+    : tier >= 5
+      ? ['mk1','mk2','mk3','mk4']
+      : tier >= 4
+        ? ['mk1','mk2','mk3']
+        : tier >= 2
+          ? ['mk1','mk2']
+          : ['mk1']
+  const pipeOptions: PipeTier[] = tier >= 6 ? ['mk1','mk2'] : ['mk1']
 
   return (
     <section className="card resource-card">
@@ -274,7 +287,7 @@ function ResourceCard({
               <label>
                 {t.miner}
                 <select value={config.miner} onChange={(e) => onChange({ ...config, miner: e.target.value as MinerTier })}>
-                  {(['mk1','mk2','mk3'] as MinerTier[]).map((miner) => <option key={miner} value={miner}>Miner Mk.{miner.slice(2)}</option>)}
+                  {minerOptions.map((miner) => <option key={miner} value={miner}>Miner Mk.{miner.slice(2)}</option>)}
                 </select>
               </label>
             )}
@@ -289,14 +302,14 @@ function ResourceCard({
             <label>
               {t.belt}
               <select value={config.belt} onChange={(e) => onChange({ ...config, belt: e.target.value as BeltTier })}>
-                {(Object.keys(beltRates) as BeltTier[]).map((belt) => <option key={belt} value={belt}>Mk.{belt.slice(2)} — {beltRates[belt]}/min</option>)}
+                {beltOptions.map((belt) => <option key={belt} value={belt}>Mk.{belt.slice(2)} — {beltRates[belt]}/min</option>)}
               </select>
             </label>
           ) : (
             <label>
               {t.pipe}
               <select value={config.pipe} onChange={(e) => onChange({ ...config, pipe: e.target.value as PipeTier })}>
-                {(Object.keys(pipeRates) as PipeTier[]).map((pipe) => <option key={pipe} value={pipe}>Mk.{pipe.slice(2)} — {pipeRates[pipe]} m³/min</option>)}
+                {pipeOptions.map((pipe) => <option key={pipe} value={pipe}>Mk.{pipe.slice(2)} — {pipeRates[pipe]} m³/min</option>)}
               </select>
             </label>
           )}
@@ -382,7 +395,11 @@ export default function App() {
       const standard = choices.find((recipe) => !recipe.alternate) ?? choices[0]
       if (standard) next[itemId] = standard.className
     }
-    return { ...next, ...overrides }
+    for (const [itemId, recipeId] of Object.entries(overrides)) {
+      const allowed = availableRecipesForProduct(itemId, progressionProfile)
+      if (allowed.some((recipe) => recipe.className === recipeId)) next[itemId] = recipeId
+    }
+    return next
   }, [progressionProfile, overrides])
 
   const selectedTargetRecipe = targetRecipes.find((recipe) => recipe.className === progressionOverrides[target]) ?? targetRecipes[0]
@@ -533,7 +550,7 @@ export default function App() {
                 {selectableAlternates.map((alt) => (
                   <label className="alternate-check" key={alt.id}>
                     <input type="checkbox" checked={unlockedAlternates.includes(alt.id)} onChange={() => toggleAlternate(alt.id)} />
-                    <span>{alt.name.replace(/^Alternate:\\s*/i, lang === 'de' ? 'Alternativ: ' : 'Alternate: ')}</span>
+                    <span>{alt.name.replace(/^Alternate:\s*/i, lang === 'de' ? 'Alternativ: ' : 'Alternate: ')}</span>
                   </label>
                 ))}
               </div>
@@ -564,7 +581,7 @@ export default function App() {
         <div className="resource-grid">
           {result.requiredResources.map((resourceId) => (
             <ResourceCard key={resourceId} resourceId={resourceId} lang={lang}
-              config={ensuredConfigs[resourceId] ?? initialConfig()} clockControlUnlocked={clockControlUnlocked}
+              config={ensuredConfigs[resourceId] ?? initialConfig()} clockControlUnlocked={clockControlUnlocked} tier={tier}
               onChange={(config) => setResource(resourceId, config)} />
           ))}
         </div>
