@@ -3227,17 +3227,56 @@ export default function FactoryDesigner({
                       const belt = selectedIncomingBelts.find(
                         (entry) => (entry.to.port ?? 0) === input.port,
                       )
+                      const incomingRate = belt
+                        ? flowForEndpoint(belt.from)
+                        : 0
+                      const usedRate = Math.min(incomingRate, input.rate)
+                      const surplus = Math.max(0, incomingRate - input.rate)
+                      const shortage = Math.max(0, input.rate - incomingRate)
+
                       return (
-                        <div className="machine-flow-row" key={`in-${input.port}`}>
-                          <div>
+                        <div className="machine-flow-card" key={`in-${input.port}`}>
+                          <div className="machine-flow-title">
                             <strong>{itemName(input.item, lang)}</strong>
-                            <small>{Math.round(input.rate * 100) / 100}/min</small>
+                            {belt && (
+                              <span>
+                                Mk.{belt.tier.slice(2)} · {beltRates[belt.tier]}/min
+                              </span>
+                            )}
                           </div>
-                          <span>
-                            {belt
-                              ? `Mk.${belt.tier.slice(2)} · ${beltRates[belt.tier]}/min`
-                              : (lang === 'de' ? 'Nicht verbunden' : 'Not connected')}
-                          </span>
+
+                          <div className="machine-flow-values">
+                            <div>
+                              <span>{lang === 'de' ? 'Eingang' : 'Incoming'}</span>
+                              <strong>{Math.round(incomingRate * 100) / 100}/min</strong>
+                            </div>
+                            <div>
+                              <span>
+                                {lang === 'de'
+                                  ? 'Für Produktion'
+                                  : 'Used for production'}
+                              </span>
+                              <strong>{Math.round(usedRate * 100) / 100}/min</strong>
+                            </div>
+                            {surplus > 0.0001 && (
+                              <div className="flow-surplus">
+                                <span>{lang === 'de' ? 'Überschuss' : 'Surplus'}</span>
+                                <strong>+{Math.round(surplus * 100) / 100}/min</strong>
+                              </div>
+                            )}
+                            {shortage > 0.0001 && (
+                              <div className="flow-shortage">
+                                <span>{lang === 'de' ? 'Fehlt' : 'Shortage'}</span>
+                                <strong>-{Math.round(shortage * 100) / 100}/min</strong>
+                              </div>
+                            )}
+                          </div>
+
+                          {!belt && (
+                            <small className="machine-flow-warning">
+                              {lang === 'de' ? 'Nicht verbunden' : 'Not connected'}
+                            </small>
+                          )}
                         </div>
                       )
                     })}
@@ -3254,10 +3293,13 @@ export default function FactoryDesigner({
                         (entry) => (entry.from.port ?? 0) === output.port,
                       )
                       return (
-                        <div className="machine-flow-row" key={`out-${output.port}`}>
+                        <div className="machine-output-card" key={`out-${output.port}`}>
                           <div>
                             <strong>{itemName(output.item, lang)}</strong>
-                            <small>{Math.round(output.rate * 100) / 100}/min</small>
+                            <span>
+                              {lang === 'de' ? 'Ausgang' : 'Output'}{' '}
+                              {Math.round(output.rate * 100) / 100}/min
+                            </span>
                           </div>
                           {belt ? (
                             <select
