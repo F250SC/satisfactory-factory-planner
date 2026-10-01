@@ -24,7 +24,7 @@ import {
   type MinerTier,
   type Purity,
 } from './data'
-import { maxMinerForTier, unlockedBelts, unlockedMiners } from './technology'
+import { unlockedBelts, unlockedMiners } from './technology'
 import {
   FOUNDATION_METERS,
   PIXELS_PER_METER,
@@ -121,7 +121,6 @@ interface Props {
   lang: 'de' | 'en'
   steps: MachineStep[]
   resources: PlannerResource[]
-  maxBeltTier: BeltTier
   tier: number
   clockControlUnlocked: boolean
   onResourceChange: (id: string, config: ResourceConfig) => void
@@ -506,7 +505,6 @@ export default function FactoryDesigner({
   lang,
   steps,
   resources,
-  maxBeltTier,
   tier,
   clockControlUnlocked,
   onResourceChange,
@@ -530,6 +528,7 @@ export default function FactoryDesigner({
   const [isPanning, setIsPanning] = useState(false)
   const [panAnchor, setPanAnchor] = useState({ x: 0, y: 0 })
   const [fitAfterLayout, setFitAfterLayout] = useState(false)
+  const beltOptions = unlockedBelts(tier)
 
   const activeFloor =
     normalized.floors.find((floor) => floor.id === activeFloorId) ??
@@ -1518,11 +1517,10 @@ export default function FactoryDesigner({
     const generatedUtilities: DesignerUtility[] = []
     const generatedBelts: DesignerBelt[] = []
 
-    const maxBeltRank = Number(maxBeltTier.slice(2))
     const beltTierFor = (rate: number): BeltTier => {
-      const tiers = (Object.keys(beltRates) as BeltTier[])
-        .filter((tier) => Number(tier.slice(2)) <= maxBeltRank)
-        .sort((a, b) => beltRates[a] - beltRates[b])
+      const tiers = [...beltOptions].sort(
+        (a, b) => beltRates[a] - beltRates[b],
+      )
       return (
         tiers.find((tier) => beltRates[tier] + 0.001 >= rate) ??
         tiers[tiers.length - 1] ??
@@ -2732,9 +2730,7 @@ export default function FactoryDesigner({
                 value={defaultBeltTier}
                 onChange={(e) => setDefaultBeltTier(e.target.value as BeltTier)}
               >
-                {(Object.keys(beltRates) as BeltTier[])
-                  .filter((tier) => Number(tier.slice(2)) <= Number(maxBeltTier.slice(2)))
-                  .map((tier) => (
+                {beltOptions.map((tier) => (
                   <option key={tier} value={tier}>
                     Mk.{tier.slice(2)} · {beltRates[tier]}/min
                   </option>
@@ -3429,13 +3425,7 @@ export default function FactoryDesigner({
                                 })
                               }
                             >
-                              {(Object.keys(beltRates) as BeltTier[])
-                                .filter(
-                                  (tier) =>
-                                    Number(tier.slice(2)) <=
-                                    Number(maxBeltTier.slice(2)),
-                                )
-                                .map((tier) => (
+                              {beltOptions.map((tier) => (
                                   <option key={tier} value={tier}>
                                     Mk.{tier.slice(2)} · {beltRates[tier]}/min
                                   </option>
@@ -3859,12 +3849,7 @@ export default function FactoryDesigner({
                         })
                       }
                     >
-                      {(Object.keys(beltRates) as BeltTier[])
-                        .filter(
-                          (tier) =>
-                            Number(tier.slice(2)) <= Number(maxBeltTier.slice(2)),
-                        )
-                        .map((tier) => (
+                      {beltOptions.map((tier) => (
                           <option key={tier} value={tier}>
                             Mk.{tier.slice(2)} · {beltRates[tier]}/min
                           </option>
