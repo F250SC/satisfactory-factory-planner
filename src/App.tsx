@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Boxes,
@@ -36,6 +36,13 @@ import {
   type PipeTier,
   type Purity,
 } from './data'
+import {
+  alternateSchematics,
+  availableRecipesForProduct,
+  availableTargetItems,
+  eligibleAlternates,
+  type ProgressionProfile,
+} from './progression'
 
 type Lang = 'de' | 'en'
 
@@ -47,6 +54,13 @@ const ui = {
     target: 'Zielprodukt',
     recipe: 'Zielrezept',
     progress: 'Fortschritt & Taktung',
+    gameProgress: 'Mein Spielstand',
+    tier: 'Freigeschaltetes Tier',
+    tierHint: 'Alle Meilensteine bis einschließlich dieses Tiers werden als abgeschlossen angenommen.',
+    alternates: 'Freigeschaltete Alternate Recipes',
+    alternatesHint: 'Markiere nur Rezepte, die du über Festplatten tatsächlich erhalten hast.',
+    alternatesCount: 'Alternativrezepte aktiv',
+    noAlternates: 'Noch keine Alternate Recipes ausgewählt.',
     clockUnlocked: 'Taktsteuerung erforscht',
     clockUnlockedHint: 'MAM: Power Slugs → „Overclock Production“. Erst dann sind Unter- und Übertakten möglich.',
     productionShards: 'Power Shards pro Produktionsmaschine',
@@ -97,6 +111,13 @@ const ui = {
     target: 'Target product',
     recipe: 'Target recipe',
     progress: 'Progression & clock speed',
+    gameProgress: 'My save progression',
+    tier: 'Unlocked tier',
+    tierHint: 'All milestones up to and including this tier are treated as completed.',
+    alternates: 'Unlocked alternate recipes',
+    alternatesHint: 'Select only recipes you have actually obtained from hard drives.',
+    alternatesCount: 'alternate recipes active',
+    noAlternates: 'No alternate recipes selected yet.',
     clockUnlocked: 'Clock control researched',
     clockUnlockedHint: 'MAM: Power Slugs → “Overclock Production”. Clock changes are unavailable before this research.',
     productionShards: 'Power Shards per production machine',
@@ -342,13 +363,38 @@ export default function App() {
   const [target, setTarget] = useState(() => targetItems.find((id) => itemName(id, 'en') === 'Steel Pipe') ?? targetItems[0])
   const initialTargetRecipe = defaultRecipeFor(target)
   const [overrides, setOverrides] = useState<RecipeOverrides>(initialTargetRecipe ? { [target]: initialTargetRecipe.className } : {})
+  const [tier, setTier] = useState(3)
+  const [unlockedAlternates, setUnlockedAlternates] = useState<string[]>([])
   const [clockControlUnlocked, setClockControlUnlocked] = useState(false)
   const [productionShards, setProductionShards] = useState(0)
   const [resourceConfigs, setResourceConfigs] = useState<Record<string, ResourceConfig>>({})
 
   const t = ui[lang]
-  const targetRecipes = recipesForProduct(target)
-  const selectedTargetRecipe = getRecipeFor(target, overrides)
+  const progressionProfile = useMemo<ProgressionProfile>(() => ({ tier, unlockedAlternates }), [tier, unlockedAlternates])
+  const unlockedTargets = useMemo(() => availableTargetItems(progressionProfile), [progressionProfile])
+  const targetRecipes = useMemo(() => availableRecipesForProduct(target, progressionProfile), [target, progressionProfile])
+  const selectableAlternates = useMemo(() => eligibleAlternates(progressionProfile), [progressionProfile])
+
+  const progressionOverrides = useMemo<RecipeOverrides>(() => {
+    const next: RecipeOverrides = {}
+    for (const itemId of targetItems) {
+      const choices = availableRecipesForProduct(itemId, progressionProfile)
+      const standard = choices.find((recipe) => !recipe.alternate) ?? choices[0]
+      if (standard) next[itemId] = standard.className
+    }
+    return { ...next, ...overrides }
+  }, [progressionProfile, overrides])
+
+  const selectedTargetRecipe = targetRecipes.find((recipe) => recipe.className === progressionOverrides[target]) ?? targetRecipes[0]
+
+  useEffect(() => {
+    if (unlockedTargets.includes(target)) return
+    const nextTarget = unlockedTargets.find((id) => itemName(id, 'en') === 'Steel Pipe') ?? unlockedTargets[0]
+    if (!nextTarget) return
+    const recipe = availableRecipesForProduct(nextTarget, progressionProfile)[0]
+    setTarget(nextTarget)
+    setOverrides(recipe ? { [nextTarget]: recipe.className } : {})
+  }, [tier, unlockedAlternates])
 
   const availability = useMemo(() => {
     const result: Record<string, number> = {}
@@ -357,8 +403,8 @@ export default function App() {
   }, [resourceConfigs, clockControlUnlocked])
 
   const firstPass = useMemo(
-    () => calculateProduction(target, availability, clockControlUnlocked, productionShards, overrides),
-    [target, availability, clockControlUnlocked, productionShards, overrides],
+    () => calculateProduction(target, availability, clockControlUnlocked, productionShards, progressionOverrides),
+    [target, availability, clockControlUnlocked, productionShards, progressionOverrides],
   )
 
   const ensuredConfigs = useMemo(() => {
@@ -377,14 +423,20 @@ export default function App() {
   }, [ensuredConfigs, clockControlUnlocked])
 
   const result = useMemo(
-    () => calculateProduction(target, effectiveAvailability, clockControlUnlocked, productionShards, overrides),
-    [target, effectiveAvailability, clockControlUnlocked, productionShards, overrides],
+    () => calculateProduction(target, effectiveAvailability, clockControlUnlocked, productionShards, progressionOverrides),
+    [target, effectiveAvailability, clockControlUnlocked, productionShards, progressionOverrides],
   )
 
   const changeTarget = (itemId: string) => {
-    const recipe = defaultRecipeFor(itemId)
+    const recipe = availableRecipesForProduct(itemId, progressionProfile)[0]
     setTarget(itemId)
     setOverrides(recipe ? { [itemId]: recipe.className } : {})
+  }
+
+  const toggleAlternate = (schematicId: string) => {
+    setUnlockedAlternates((current) => current.includes(schematicId)
+      ? current.filter((id) => id !== schematicId)
+      : [...current, schematicId])
   }
 
   const setResource = (id: string, config: ResourceConfig) => setResourceConfigs((current) => ({ ...current, [id]: config }))
@@ -422,7 +474,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.7</div>
+          <div className="version">v0.8</div>
         </div>
       </header>
 
@@ -439,7 +491,7 @@ export default function App() {
             <label>
               <span className="eyebrow">{t.target}</span>
               <select className="target-select" value={target} onChange={(e) => changeTarget(e.target.value)}>
-                {targetItems.map((item) => <option key={item} value={item}>{itemName(item, lang)}</option>)}
+                {unlockedTargets.map((item) => <option key={item} value={item}>{itemName(item, lang)}</option>)}
               </select>
             </label>
             <label>
@@ -455,6 +507,38 @@ export default function App() {
               {machineName(selectedTargetRecipe.producedIn, lang)}
             </div>
           )}
+        </section>
+
+        <section className="save-progress card">
+          <div className="save-progress-head">
+            <div>
+              <span className="eyebrow">{t.gameProgress}</span>
+              <h2>Tier {tier}</h2>
+            </div>
+            <div className="profile-badge">{unlockedAlternates.length} {t.alternatesCount}</div>
+          </div>
+          <div className="save-progress-grid">
+            <label>
+              {t.tier}
+              <select value={tier} onChange={(e) => setTier(Number(e.target.value))}>
+                {[0,1,2,3,4,5,6,7,8,9].map((value) => <option key={value} value={value}>Tier {value}</option>)}
+              </select>
+              <small>{t.tierHint}</small>
+            </label>
+            <details className="alternate-picker">
+              <summary>{t.alternates} ({unlockedAlternates.length})</summary>
+              <p>{t.alternatesHint}</p>
+              <div className="alternate-list">
+                {selectableAlternates.length === 0 && <span className="muted">{t.noAlternates}</span>}
+                {selectableAlternates.map((alt) => (
+                  <label className="alternate-check" key={alt.id}>
+                    <input type="checkbox" checked={unlockedAlternates.includes(alt.id)} onChange={() => toggleAlternate(alt.id)} />
+                    <span>{alt.name.replace(/^Alternate:\\s*/i, lang === 'de' ? 'Alternativ: ' : 'Alternate: ')}</span>
+                  </label>
+                ))}
+              </div>
+            </details>
+          </div>
         </section>
 
         <section className="progress-card card">
@@ -548,8 +632,8 @@ export default function App() {
           <p className="section-help">{t.recipeChoicesHint}</p>
           <div className="recipe-choice-list">
             {Array.from(new Set(result.machineSteps.map((step) => step.item))).map((itemId) => {
-              const choices = recipesForProduct(itemId)
-              const selected = getRecipeFor(itemId, overrides)
+              const choices = availableRecipesForProduct(itemId, progressionProfile)
+              const selected = choices.find((recipe) => recipe.className === progressionOverrides[itemId]) ?? choices[0]
               if (choices.length <= 1 || !selected) return null
               return (
                 <div className="recipe-choice-row" key={itemId}>
