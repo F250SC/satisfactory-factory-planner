@@ -1,113 +1,170 @@
 # Satisfactory Factory Planner
 
-A resource-first production planner for **Satisfactory**.
+A resource-first production planner and visual factory designer for **Satisfactory**.
 
-Instead of starting with a desired output rate, the planner starts with the resource nodes, extractors and transport technology you actually have and calculates what production is possible.
+Instead of forcing you to enter a target output rate first, the planner starts from the resource nodes, miners/extractors and transport technology you actually have. It calculates what can be supplied continuously and builds the production chain from those real constraints.
 
-## v0.10
+Current app version: **0.23.0**
 
-- Complete automatable production dataset: **276 machine recipes**
+## Production planner
+
+- 276 automatable machine recipes from the current normalized game-data snapshot
 - Standard and alternate recipes
-- 152 production items
-- Constructor, Smelter, Foundry, Assembler, Manufacturer, Refinery, Packager, Blender, Converter, Particle Accelerator and Quantum Encoder
-- Dynamic target-product and target-recipe selection
-- Recipe overrides for intermediate products
-- Recursive production-chain calculation
-- 13 node/extraction resources
+- Tier-aware recipe and building progression
+- Hard-drive alternate recipe selection
+- Resource-first calculation
 - Miner Mk.1 / Mk.2 / Mk.3
-- Conveyor Belt Mk.1 – Mk.6 limits
-- Pipeline Mk.1 / Mk.2 limits
-- Solid, oil, water and nitrogen extraction
-- Configurable number of nodes/extractors
-- Progression-aware clock control: before MAM research all configurable buildings stay at 100%
-- Underclocking becomes available with the MAM “Overclock Production” research
+- Conveyor Belt Mk.1 – Mk.6
+- Pipeline Mk.1 / Mk.2
+- Solid, oil, water and nitrogen resource handling
+- Impure / Normal / Pure node settings where applicable
+- Configurable extractor count
+- Clock control locked until the player marks the MAM research as completed
 - Power Shard limits: 0/1/2/3 shards = 100/150/200/250% maximum
-- Resource extractors/miners can be clocked independently once the research is unlocked
-- Exact final-machine underclocking where needed, stored/displayed up to four decimal places
-- Per-stage in-game clock setup (for example 1×100% + 1×33.3333%)
-- Separate theoretical resource maximum and practically buildable output
-- When clock control is locked, production is solved with whole machines fixed at 100%
-- Full upstream consumption is propagated after machine rounding, so impossible rounded-up plans are rejected
-- Intermediate overproduction is shown explicitly
-- Original Satisfactory item imagery in the planner and machine imagery where available
-- Expanded German item/recipe translations with English fallback
-- Estimated power calculation using Satisfactory's production-machine clock exponent
-- Resource surplus and transport bottleneck status
-- German / English interface
-- Responsive web UI
-- Tier-aware progression profile
-- Hard-drive alternate recipe unlock selection
-- Named browser save profiles
-- Automatic local save of planner settings per profile
-- Profile switching preserves target, recipes, tier, alternates, clock settings and resource-node configuration
-- Interactive Factory Designer tab
-- Foundation grid with snap-to-cell placement
-- Add machines from the current production chain
-- Generate a starter layout from the current production plan
-- Drag machines between grid cells
-- Rotate machines in 90° steps
-- Delete and select machines
-- Factory layout is saved inside the active browser profile
+- Underclocking and overclocking
+- Individual machine clock recommendations
+- Whole-machine planning while clock control is locked
+- Raw-resource maximum vs. continuously supplied production
+- Intermediate surplus display
+- Estimated production-machine power use
+- Resource and transport bottleneck information
+- German and English UI
+- Named browser save profiles with automatic persistence
 
-## Clock-speed model
+## Factory Designer
 
-The selected clock value is a **maximum allowed clock per machine**, not a forced clock for every machine.
+- Blueprint workspace with pan and zoom
+- Effectively unbounded coordinates in all directions
+- Real machine footprints and 90° rotation
+- Multiple floors
+- Conveyor lifts
+- Resource sources / miners
+- Splitters and mergers with game-like port orientation
+- One connection per physical port
+- Material-compatible manual connections
+- Material-colored transport routes
+- Selectable belts with a property inspector
+- Manual belt waypoints
+- Straight, orthogonal and smoothed route rendering
+- Automatic starter-factory generation from the calculated plan
+- Local splitter/merger generation based on machine flow
+- Obstacle-aware automatic belt routing
+- Per-machine input/output flow information
+- Mine configuration from the Designer
+- Shared resource/belt settings between Planner and Designer
+- Detection when an automatically generated blueprint no longer matches the current production plan
+- Factory layout saved inside browser profiles
 
-Example: if a production stage needs 133.33% of one machine at 100% capacity and the configured maximum is 100%, the planner recommends:
+## Calculation model
+
+When clock control is available, the planner uses the selected number of Power Shards as the maximum allowed machine clock. It can underclock the final machine in a stage to match the required rate.
+
+Example:
 
 ```
-2 machines: 1×100% + 1×33.33%
+Required capacity: 133.3333% of one 100% machine
+Maximum allowed clock: 100%
+
+=> 2 machines:
+   1 × 100%
+   1 × 33.3333%
 ```
 
-If the configured maximum is 150%, the same stage can use:
+Before clock control is unlocked, production machines are fixed at 100%. Upstream machines are rounded to whole machines and their full input consumption is propagated upstream. This avoids presenting a nominal output that cannot actually be supplied continuously.
 
+## Important current limitations
+
+### By-products and closed loops
+
+Recipes with by-products are represented at machine level, but the production solver does **not yet automatically feed by-products back into closed production loops**.
+
+This matters especially for some oil, aluminum, nuclear and late-game chains. The planner can therefore report a conservative external raw-resource requirement for such chains.
+
+The UI warns when the selected chain contains these recipes.
+
+### Pipes in the Factory Designer
+
+The production calculation supports liquid/gas rates and pipe limits. The Factory Designer does not yet model dedicated pipe/pipeline objects; fluid/gas connections are currently visual transport lines.
+
+The UI warns when a selected factory contains fluids or gases.
+
+### Automatic layout
+
+The auto-layout is intended to create a useful editable starting factory, not a guaranteed globally optimal building layout. Manual movement and routing remain part of the Designer workflow.
+
+## Data integrity
+
+The project includes build-time validation for:
+
+- duplicate recipe IDs
+- invalid recipe times and amounts
+- unknown item references in production recipes
+- unknown production buildings
+- recipe/alternate metadata counts
+- raw-resource references
+- progression references
+- explicit Factory Designer footprints for every production building
+
+Run:
+
+```bash
+npm run check
 ```
-1 machine: 1×133.33%
-```
 
-Satisfactory itself supports configurable clock speeds between 1% and 250%; the 100/150/200/250 choices in this planner are convenience limits for planning.
+## Build pipeline
 
-## Game data
+Every push to `main` runs a GitHub Actions CI check with TypeScript compilation and game-data validation.
 
-The planner's production dataset is derived from Satisfactory's machine-readable CommunityResources/Docs game data. The current normalized snapshot contains 276 automatable machine recipes and 152 items.
-
-The normalized snapshot used for v0.3 was imported from the public Satisfactory Workbench game-data snapshot, which itself documents its source as Satisfactory CommunityResources-derived data.
-
-The game data is kept separate in `src/gameData.json` so it can be replaced when Satisfactory updates without rewriting the calculation engine.
-
-## Run locally
+Cloudflare Pages then performs the production build.
 
 ```bash
 npm install
-npm run dev
-```
-
-## Build
-
-```bash
+npm run check
 npm run build
 ```
 
-The production build is written to `dist/` and deployed automatically via Cloudflare Pages.
+The production build is written to `dist/`.
+
+The build validates TypeScript and game data **before** downloading game icons, so code/data failures surface quickly.
+
+## Game assets
+
+Game imagery is synchronized during the production build from the configured public icon source. Missing external images do not stop the build; the UI has visual fallbacks where an asset is unavailable.
+
+## Save data
+
+Profiles are stored in the browser using Local Storage.
+
+Saved profiles are normalized when loaded so older layouts remain compatible when newer Designer fields are introduced.
 
 ## Architecture
 
-- React + TypeScript + Vite
-- Data-driven items / recipes / buildings
+- React 19
+- TypeScript
+- Vite
+- Static normalized Satisfactory game-data snapshot
 - Recursive reverse production solver
-- Client-side deployment
-- Static game-data snapshot
+- Client-side persistence
+- Cloudflare Pages deployment
+- GitHub Actions validation
 
-## Planned
+## Main source files
 
-- Save/load factories
-- Recipe-unlock profiles
-- Better by-product accounting and loop solving
-- Satisfactory icon integration
-- Factory Designer
-- Real machine footprints
-- Foundations and rotation
-- Multiple floors
-- Conveyor lifts and belt routing
-- Automatic layout suggestions
-- Optional 3D view
+- `src/engine.ts` — production calculation
+- `src/data.ts` — normalized game data access and display helpers
+- `src/progression.ts` — recipe/building unlock rules
+- `src/technology.ts` — miner/belt/pipe tier unlock rules
+- `src/FactoryDesigner.tsx` — visual factory editor
+- `src/buildingFootprints.ts` — machine dimensions
+- `src/profiles.ts` — browser save profiles
+- `scripts/validate-data.mjs` — data integrity checks
+- `scripts/sync-assets.mjs` — build-time image synchronization
+
+## Next architectural milestones
+
+- dedicated Pipe/Pipeline objects in the Factory Designer
+- by-product-aware / loop-aware production solver
+- stronger automatic route collision avoidance
+- undo/redo history for Designer editing
+- optional blueprint export/import
+- automated calculation tests for representative recipe chains
