@@ -184,15 +184,17 @@ function clockSummary(clocks: number[], unlocked: boolean) {
 }
 
 function ItemThumb({ id, alt }: { id: string; alt: string }) {
+  const [failed, setFailed] = useState(false)
   const src = itemIconUrl(id)
-  if (!src) return <div className="thumb-fallback"><Boxes size={18} /></div>
-  return <img className="item-thumb" src={src} alt={alt} loading="lazy" />
+  if (!src || failed) return <div className="thumb-fallback"><Boxes size={18} /></div>
+  return <img className="item-thumb" src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />
 }
 
 function MachineThumb({ id, alt }: { id: string; alt: string }) {
+  const [failed, setFailed] = useState(false)
   const src = machineIconUrl(id)
-  if (!src) return <div className="thumb-fallback"><Factory size={18} /></div>
-  return <img className="machine-thumb" src={src} alt={alt} loading="lazy" />
+  if (!src || failed) return <div className="thumb-fallback"><Factory size={18} /></div>
+  return <img className="machine-thumb" src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />
 }
 
 function ResourceCard({
