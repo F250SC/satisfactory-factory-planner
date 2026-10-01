@@ -1266,3 +1266,95 @@ select:focus, input:focus { border-color: #f28c28; }
   font-size: 8px;
   color: #c4b47d;
 }
+
+
+/* v0.16 infinite blueprint camera */
+.designer-canvas {
+  min-width: 0;
+  overflow: hidden;
+}
+.designer-view-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #33404d;
+  border-radius: 9px;
+  background: #10161d;
+}
+.zoom-controls button {
+  min-width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #98a5b3;
+}
+.zoom-controls button:hover {
+  background: #1a2530;
+  color: #fff;
+}
+.zoom-controls .zoom-value {
+  min-width: 54px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.blueprint-viewport {
+  position: relative;
+  width: 100%;
+  height: clamp(560px, 72vh, 900px);
+  overflow: hidden;
+  border: 1px solid #2d3743;
+  border-radius: 12px;
+  background-color: #0f151c;
+  background-image:
+    linear-gradient(to right, #27313d 1px, transparent 1px),
+    linear-gradient(to bottom, #27313d 1px, transparent 1px);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+.blueprint-viewport.panning {
+  cursor: grabbing;
+}
+.blueprint-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.blueprint-world .belt-overlay {
+  overflow: visible;
+}
+.blueprint-world .factory-node,
+.blueprint-world .factory-source,
+.blueprint-world .factory-utility,
+.blueprint-world .factory-lift {
+  cursor: move;
+}
+@media (max-width: 700px) {
+  .designer-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .designer-view-actions {
+    justify-content: space-between;
+  }
+  .blueprint-viewport {
+    height: 62vh;
+    min-height: 480px;
+  }
+}
