@@ -63,10 +63,11 @@ const ui = {
     extractorClock: 'Takt',
     extractorShards: 'Power Shards',
     lockedAt100: 'Noch nicht freigeschaltet → 100 %',
-    maxProduction: 'Praktisch baubare Produktion',
-    theoreticalMaximum: 'Theoretisches Rohstoffmaximum',
+    maxProduction: 'Sauber dauerhaft versorgt',
+    theoreticalMaximum: 'Rohstoffmaximum',
+    intermittentMaximum: 'Mit wartenden Maschinen möglich',
     clockLimited: 'Ohne Taktung begrenzt',
-    clockLimitedHint: 'Das theoretische Maximum ist mit ganzen 100-%-Maschinen nicht dauerhaft voll versorgbar.',
+    clockLimitedHint: 'Das Rohstoffmaximum ist nur erreichbar, wenn zusätzliche Maschinen zeitweise auf Material warten. Für einen dauerhaft voll versorgten Aufbau gilt der kleinere Wert.',
     intermediateSurplus: 'Überschuss',
     balanced: 'Ausgeglichen',
     surplus: 'Rohstoffüberschuss',
@@ -112,10 +113,11 @@ const ui = {
     extractorClock: 'Clock speed',
     extractorShards: 'Power Shards',
     lockedAt100: 'Not researched yet → 100%',
-    maxProduction: 'Practical buildable production',
-    theoreticalMaximum: 'Theoretical resource maximum',
+    maxProduction: 'Continuously fully supplied',
+    theoreticalMaximum: 'Resource maximum',
+    intermittentMaximum: 'Possible with waiting machines',
     clockLimited: 'Limited without clock control',
-    clockLimitedHint: 'The theoretical maximum cannot be continuously supplied using whole machines fixed at 100%.',
+    clockLimitedHint: 'The resource maximum is only achievable if extra machines periodically wait for materials. Use the lower value for a continuously fully supplied setup.',
     intermediateSurplus: 'Surplus',
     balanced: 'Balanced',
     surplus: 'Resource surplus',
@@ -396,7 +398,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.5</div>
+          <div className="version">v0.6</div>
         </div>
       </header>
 
@@ -465,9 +467,15 @@ export default function App() {
               <span className="eyebrow">{t.maxProduction}</span>
               <h2>{fmt(result.output)} {itemName(target, lang)} / min</h2>
               {!clockControlUnlocked && (
-                <div className="theoretical-line">
-                  <span>{t.theoreticalMaximum}</span>
-                  <strong>{fmt(result.theoreticalOutput)} {itemName(target, lang)} / min</strong>
+                <div className="result-comparison">
+                  <div>
+                    <span>{t.theoreticalMaximum}</span>
+                    <strong>{fmt(result.theoreticalOutput)} {itemName(target, lang)} / min</strong>
+                  </div>
+                  <div>
+                    <span>{t.intermittentMaximum}</span>
+                    <strong>{fmt(result.theoreticalOutput)} {itemName(target, lang)} / min</strong>
+                  </div>
                 </div>
               )}
             </div>
