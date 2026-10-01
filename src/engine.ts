@@ -1,68 +1,154 @@
 import {
   baseMinerRates,
   beltRates,
+  buildings,
+  defaultRecipeFor,
+  pipeRates,
+  primaryProduct,
   purityMultiplier,
   rawResources,
   recipes,
+  resourceMeta,
   type BeltTier,
-  type ItemId,
+  type GameRecipe,
   type MinerTier,
+  type PipeTier,
   type Purity,
-  type Recipe,
 } from './data'
 
 export interface ResourceConfig {
   purity: Purity
   miner: MinerTier
   belt: BeltTier
+  pipe: PipeTier
+  count: number
+  manualRate?: number
 }
 
 export interface ResourceRate {
-  mined: number
+  extracted: number
   available: number
-  beltLimited: boolean
+  transportLimited: boolean
+  unit: 'items' | 'm³'
 }
 
 export interface MachineStep {
-  item: ItemId
-  recipe: Recipe
+  item: string
+  recipe: GameRecipe
   requiredRate: number
-  exactMachines: number
+  exactMachinesAt100: number
   machines: number
-  clock: number
+  clocks: number[]
+  totalPowerMW: number
 }
 
-function recipeFor(item: ItemId) {
-  return recipes.find((recipe) => recipe.output === item)
+export type RecipeOverrides = Record<string, string>
+
+function selectedRecipe(itemId: string, overrides: RecipeOverrides) {
+  const overrideId = overrides[itemId]
+  if (overrideId) {
+    const override = recipes.find((recipe) => recipe.className === overrideId)
+    if (override?.products.some((product) => product.item === itemId)) return override
+  }
+  return defaultRecipeFor(itemId)
 }
 
-export function minerOutput(config: ResourceConfig): ResourceRate {
-  const mined = baseMinerRates[config.miner] * purityMultiplier[config.purity]
-  const available = Math.min(mined, beltRates[config.belt])
+function outputRate(recipe: GameRecipe, itemId: string) {
+  const product = primaryProduct(recipe, itemId)
+  if (!product || recipe.time <= 0) return 0
+  return product.amount * (60 / recipe.time)
+}
+
+function ingredientRate(recipe: GameRecipe, amount: number) {
+  return amount * (60 / recipe.time)
+}
+
+export function resourceOutput(resourceId: string, config: ResourceConfig): ResourceRate {
+  const meta = resourceMeta[resourceId]
+  const count = Math.max(1, config.count || 1)
+
+  if (!meta) {
+    const manual = Math.max(0, config.manualRate ?? 0)
+    return { extracted: manual, available: manual, transportLimited: false, unit: 'items' }
+  }
+
+  if (meta.kind === 'solid') {
+    const extracted =
+      baseMinerRates[config.miner] *
+      purityMultiplier[config.purity] *
+      count
+    const capacity = beltRates[config.belt]
+    return {
+      extracted,
+      available: Math.min(extracted, capacity),
+      transportLimited: extracted > capacity + 0.0001,
+      unit: 'items',
+    }
+  }
+
+  if (meta.kind === 'oil') {
+    const extracted = 120 * purityMultiplier[config.purity] * count
+    const capacity = pipeRates[config.pipe]
+    return {
+      extracted,
+      available: Math.min(extracted, capacity),
+      transportLimited: extracted > capacity + 0.0001,
+      unit: 'm³',
+    }
+  }
+
+  if (meta.kind === 'water') {
+    const extracted = 120 * count
+    const capacity = pipeRates[config.pipe]
+    return {
+      extracted,
+      available: Math.min(extracted, capacity),
+      transportLimited: extracted > capacity + 0.0001,
+      unit: 'm³',
+    }
+  }
+
+  const extracted = 60 * purityMultiplier[config.purity] * count
+  const capacity = pipeRates[config.pipe]
   return {
-    mined,
-    available,
-    beltLimited: available + 0.0001 < mined,
+    extracted,
+    available: Math.min(extracted, capacity),
+    transportLimited: extracted > capacity + 0.0001,
+    unit: 'm³',
   }
 }
 
-export function rawRequirementPerUnit(item: ItemId): Partial<Record<ItemId, number>> {
-  if (rawResources.includes(item)) {
-    return { [item]: 1 }
+function rawRequirementPerUnit(
+  itemId: string,
+  overrides: RecipeOverrides,
+  stack: string[] = [],
+): Record<string, number> {
+  const hasOverride = Boolean(overrides[itemId])
+
+  if (rawResources.includes(itemId) && !hasOverride) {
+    return { [itemId]: 1 }
   }
 
-  const recipe = recipeFor(item)
+  if (stack.includes(itemId)) {
+    throw new Error(`Recipe cycle detected: ${[...stack, itemId].join(' -> ')}`)
+  }
+
+  const recipe = selectedRecipe(itemId, overrides)
   if (!recipe) {
-    throw new Error(`No recipe configured for ${item}`)
+    return { [itemId]: 1 }
   }
 
-  const requirements: Partial<Record<ItemId, number>> = {}
+  const outRate = outputRate(recipe, itemId)
+  if (outRate <= 0) return { [itemId]: 1 }
 
-  for (const input of recipe.inputs) {
-    const inputPerOutput = input.rate / recipe.outputRate
-    const nested = rawRequirementPerUnit(input.item)
+  const requirements: Record<string, number> = {}
 
-    for (const [raw, amount] of Object.entries(nested) as Array<[ItemId, number]>) {
+  for (const input of recipe.ingredients) {
+    const inRate = ingredientRate(recipe, input.amount)
+    const inputPerOutput = inRate / outRate
+    const nested = rawRequirementPerUnit(input.item, overrides, [...stack, itemId])
+
+    for (const [raw, amount] of Object.entries(nested)) {
       requirements[raw] = (requirements[raw] ?? 0) + amount * inputPerOutput
     }
   }
@@ -71,68 +157,120 @@ export function rawRequirementPerUnit(item: ItemId): Partial<Record<ItemId, numb
 }
 
 function collectMachineRates(
-  item: ItemId,
+  itemId: string,
   requiredRate: number,
-  accumulator: Partial<Record<ItemId, number>>,
+  overrides: RecipeOverrides,
+  accumulator: Map<string, { item: string; recipe: GameRecipe; rate: number }>,
+  stack: string[] = [],
 ) {
-  if (rawResources.includes(item)) return
+  const hasOverride = Boolean(overrides[itemId])
+  if (rawResources.includes(itemId) && !hasOverride) return
+  if (stack.includes(itemId)) return
 
-  const recipe = recipeFor(item)
-  if (!recipe) {
-    throw new Error(`No recipe configured for ${item}`)
-  }
+  const recipe = selectedRecipe(itemId, overrides)
+  if (!recipe) return
 
-  accumulator[item] = (accumulator[item] ?? 0) + requiredRate
+  const key = `${itemId}::${recipe.className}`
+  const current = accumulator.get(key)
+  accumulator.set(key, {
+    item: itemId,
+    recipe,
+    rate: (current?.rate ?? 0) + requiredRate,
+  })
 
-  for (const input of recipe.inputs) {
-    const inputRate = requiredRate * (input.rate / recipe.outputRate)
-    collectMachineRates(input.item, inputRate, accumulator)
+  const outRate = outputRate(recipe, itemId)
+  if (outRate <= 0) return
+
+  for (const ingredient of recipe.ingredients) {
+    const needed =
+      requiredRate *
+      (ingredientRate(recipe, ingredient.amount) / outRate)
+    collectMachineRates(
+      ingredient.item,
+      needed,
+      overrides,
+      accumulator,
+      [...stack, itemId],
+    )
   }
 }
 
-export function calculateProduction(
-  target: ItemId,
-  resourceAvailability: Partial<Record<ItemId, number>>,
-  allowOverclock: boolean,
-) {
-  const rawPerUnit = rawRequirementPerUnit(target)
-  const usedRaw = Object.entries(rawPerUnit) as Array<[ItemId, number]>
+function clockPlan(exactMachinesAt100: number, maxClock: number) {
+  const capacityPerMachine = maxClock / 100
+  const machines = Math.max(1, Math.ceil(exactMachinesAt100 / capacityPerMachine))
+  let remainingPercent = exactMachinesAt100 * 100
+  const clocks: number[] = []
 
-  const possibleRates = usedRaw.map(([resource, requirement]) => {
-    const available = resourceAvailability[resource] ?? 0
-    return requirement > 0 ? available / requirement : Number.POSITIVE_INFINITY
-  })
-
-  const output = possibleRates.length > 0 ? Math.min(...possibleRates) : 0
-  const rawUsed: Partial<Record<ItemId, number>> = {}
-  const leftovers: Partial<Record<ItemId, number>> = {}
-
-  for (const [resource, requirement] of usedRaw) {
-    const used = output * requirement
-    const available = resourceAvailability[resource] ?? 0
-    rawUsed[resource] = used
-    leftovers[resource] = Math.max(0, available - used)
+  for (let i = 0; i < machines; i += 1) {
+    const clock = Math.min(maxClock, remainingPercent)
+    clocks.push(Math.max(1, clock))
+    remainingPercent -= clock
   }
 
-  const machineRates: Partial<Record<ItemId, number>> = {}
-  collectMachineRates(target, output, machineRates)
+  return { machines, clocks }
+}
 
-  const machineSteps: MachineStep[] = Object.entries(machineRates).map(([itemKey, requiredRate]) => {
-    const item = itemKey as ItemId
-    const recipe = recipeFor(item)!
-    const exactMachines = requiredRate / recipe.outputRate
-    const machines = allowOverclock
-      ? Math.max(1, Math.ceil(exactMachines / 2.5))
-      : Math.max(1, Math.ceil(exactMachines))
-    const clock = (exactMachines / machines) * 100
+function machinePower(recipe: GameRecipe, clocks: number[]) {
+  const building = buildings[recipe.producedIn]
+  if (!building) return 0
+
+  if (recipe.variablePower && recipe.maxPower > recipe.minPower) {
+    return clocks.reduce((sum, clock) => {
+      const factor = clock / 100
+      const average = (recipe.minPower + recipe.maxPower) / 2
+      return sum + average * Math.pow(factor, 1.321928)
+    }, 0)
+  }
+
+  return clocks.reduce(
+    (sum, clock) => sum + building.power * Math.pow(clock / 100, 1.321928),
+    0,
+  )
+}
+
+export function calculateProduction(
+  targetItem: string,
+  availability: Record<string, number>,
+  maxClock: number,
+  overrides: RecipeOverrides,
+) {
+  const rawPerUnit = rawRequirementPerUnit(targetItem, overrides)
+  const rawEntries = Object.entries(rawPerUnit).filter(([, amount]) => amount > 0)
+
+  const possibleRates = rawEntries.map(([resource, requirement]) => {
+    const available = availability[resource] ?? 0
+    return available / requirement
+  })
+
+  const output =
+    possibleRates.length > 0 && possibleRates.every(Number.isFinite)
+      ? Math.max(0, Math.min(...possibleRates))
+      : 0
+
+  const rawUsed: Record<string, number> = {}
+  const leftovers: Record<string, number> = {}
+
+  for (const [resource, requirement] of rawEntries) {
+    rawUsed[resource] = output * requirement
+    leftovers[resource] = Math.max(0, (availability[resource] ?? 0) - rawUsed[resource])
+  }
+
+  const collected = new Map<string, { item: string; recipe: GameRecipe; rate: number }>()
+  collectMachineRates(targetItem, output, overrides, collected)
+
+  const machineSteps: MachineStep[] = Array.from(collected.values()).map(({ item, recipe, rate }) => {
+    const perMachine = outputRate(recipe, item)
+    const exactMachinesAt100 = perMachine > 0 ? rate / perMachine : 0
+    const { machines, clocks } = clockPlan(exactMachinesAt100, maxClock)
 
     return {
       item,
       recipe,
-      requiredRate,
-      exactMachines,
+      requiredRate: rate,
+      exactMachinesAt100,
       machines,
-      clock,
+      clocks,
+      totalPowerMW: machinePower(recipe, clocks),
     }
   })
 
@@ -141,7 +279,12 @@ export function calculateProduction(
     rawPerUnit,
     rawUsed,
     leftovers,
-    requiredResources: usedRaw.map(([resource]) => resource),
+    requiredResources: rawEntries.map(([resource]) => resource),
     machineSteps,
+    totalPowerMW: machineSteps.reduce((sum, step) => sum + step.totalPowerMW, 0),
   }
+}
+
+export function getRecipeFor(itemId: string, overrides: RecipeOverrides) {
+  return selectedRecipe(itemId, overrides)
 }
