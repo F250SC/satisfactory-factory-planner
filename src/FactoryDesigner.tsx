@@ -1882,12 +1882,38 @@ export default function FactoryDesigner({
                 {activeFloor.name} · {activeFloor.elevationM} m
               </h2>
               <small>
-                {GRID_W} × {GRID_H} Foundations ·{' '}
-                {GRID_W * FOUNDATION_METERS} × {GRID_H * FOUNDATION_METERS} m
+                {lang === 'de'
+                  ? 'Freie Blueprint-Fläche · Raster 8 × 8 m'
+                  : 'Free blueprint workspace · 8 × 8 m grid'}
               </small>
             </div>
-            <div className="designer-count">
-              {activeNodes.length} {lang === 'de' ? 'Maschinen' : 'machines'}
+            <div className="designer-view-actions">
+              <div className="zoom-controls">
+                <button
+                  title={lang === 'de' ? 'Rauszoomen' : 'Zoom out'}
+                  onClick={() => setZoomAround(zoom - 0.1)}
+                >
+                  <ZoomOut size={15} />
+                </button>
+                <button className="zoom-value" onClick={() => { setZoom(1); setPan({ x: 48, y: 48 }) }}>
+                  {zoomLabel}
+                </button>
+                <button
+                  title={lang === 'de' ? 'Reinzoomen' : 'Zoom in'}
+                  onClick={() => setZoomAround(zoom + 0.1)}
+                >
+                  <ZoomIn size={15} />
+                </button>
+                <button
+                  title={lang === 'de' ? 'Alles einpassen' : 'Fit all'}
+                  onClick={fitView}
+                >
+                  <Maximize2 size={15} />
+                </button>
+              </div>
+              <div className="designer-count">
+                {activeNodes.length} {lang === 'de' ? 'Maschinen' : 'machines'}
+              </div>
             </div>
           </div>
 
@@ -1899,22 +1925,47 @@ export default function FactoryDesigner({
           )}
 
           <div
-            className="factory-grid"
+            ref={viewportRef}
+            className={`blueprint-viewport ${isPanning ? 'panning' : ''}`}
             style={{
-              width: GRID_W * CELL_PX,
-              height: GRID_H * CELL_PX,
-              gridTemplateColumns: `repeat(${GRID_W}, ${CELL_PX}px)`,
-              gridTemplateRows: `repeat(${GRID_H}, ${CELL_PX}px)`,
+              backgroundSize: `${CELL_PX * zoom}px ${CELL_PX * zoom}px`,
+              backgroundPosition: `${pan.x}px ${pan.y}px`,
             }}
+            onWheel={(e) => {
+              e.preventDefault()
+              const direction = e.deltaY > 0 ? -1 : 1
+              setZoomAround(zoom + direction * 0.1, e.clientX, e.clientY)
+            }}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return
+              const target = e.target as HTMLElement
+              if (target.closest('.factory-node, .factory-source, .factory-utility, .factory-lift, .machine-port')) return
+              setIsPanning(true)
+              setPanAnchor({ x: e.clientX - pan.x, y: e.clientY - pan.y })
+              e.currentTarget.setPointerCapture(e.pointerId)
+            }}
+            onPointerMove={(e) => {
+              if (!isPanning) return
+              setPan({
+                x: e.clientX - panAnchor.x,
+                y: e.clientY - panAnchor.y,
+              })
+            }}
+            onPointerUp={(e) => {
+              if (!isPanning) return
+              setIsPanning(false)
+              if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                e.currentTarget.releasePointerCapture(e.pointerId)
+              }
+            }}
+            onPointerCancel={() => setIsPanning(false)}
             onDragOver={(e) => {
               e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
             }}
             onDrop={(e) => {
               e.preventDefault()
-              const raw = e.dataTransfer.getData(
-                'application/x-satisfactory-object',
-              )
+              const raw = e.dataTransfer.getData('application/x-satisfactory-object')
               if (!raw) return
 
               const payload = JSON.parse(raw) as {
@@ -1924,20 +1975,13 @@ export default function FactoryDesigner({
                 offsetY: number
               }
 
-              const grid = e.currentTarget
-              const rect = grid.getBoundingClientRect()
-              const leftPx =
-                e.clientX - rect.left + grid.scrollLeft - payload.offsetX
-              const topPx =
-                e.clientY - rect.top + grid.scrollTop - payload.offsetY
-              const x = Math.max(
-                0,
-                Math.min(GRID_W - 1, Math.round(leftPx / CELL_PX)),
-              )
-              const y = Math.max(
-                0,
-                Math.min(GRID_H - 1, Math.round(topPx / CELL_PX)),
-              )
+              const rect = e.currentTarget.getBoundingClientRect()
+              const worldLeftPx =
+                (e.clientX - rect.left - pan.x - payload.offsetX) / zoom
+              const worldTopPx =
+                (e.clientY - rect.top - pan.y - payload.offsetY) / zoom
+              const x = Math.max(0, Math.round(worldLeftPx / CELL_PX))
+              const y = Math.max(0, Math.round(worldTopPx / CELL_PX))
 
               if (payload.kind === 'node') moveNode(payload.id, x, y)
               else if (payload.kind === 'utility') moveUtility(payload.id, x, y)
@@ -1945,14 +1989,16 @@ export default function FactoryDesigner({
               else moveLift(payload.id, x, y)
             }}
           >
-            {Array.from({ length: GRID_W * GRID_H }).map((_, index) => (
-              <div key={index} className="foundation-cell" />
-            ))}
-
+            <div
+              className="blueprint-world"
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              }}
+            >
             <svg
               className="belt-overlay"
-              width={GRID_W * CELL_PX}
-              height={GRID_H * CELL_PX}
+              width="1"
+              height="1"
             >
               <defs>
                 <marker
@@ -2195,6 +2241,7 @@ export default function FactoryDesigner({
                 </button>
               )
             })}
+            </div>
           </div>
         </section>
       </section>
