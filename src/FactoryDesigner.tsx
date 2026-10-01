@@ -909,6 +909,7 @@ export default function FactoryDesigner({
   }
 
   const generateFromPlan = () => {
+    setPlacementError(null)
     const keepNodes = normalized.nodes.filter(
       (node) => (node.floorId ?? normalized.floors[0].id) !== activeFloor.id,
     )
@@ -1242,7 +1243,6 @@ export default function FactoryDesigner({
     setSelectedLiftId(null)
     setConnectFrom(null)
     setBeltToolActive(false)
-    if (!placementError) setPlacementError(null)
   }
 
   const addFloor = () => {
@@ -1583,7 +1583,9 @@ export default function FactoryDesigner({
                 value={defaultBeltTier}
                 onChange={(e) => setDefaultBeltTier(e.target.value as BeltTier)}
               >
-                {(Object.keys(beltRates) as BeltTier[]).map((tier) => (
+                {(Object.keys(beltRates) as BeltTier[])
+                  .filter((tier) => Number(tier.slice(2)) <= Number(maxBeltTier.slice(2)))
+                  .map((tier) => (
                   <option key={tier} value={tier}>
                     Mk.{tier.slice(2)} · {beltRates[tier]}/min
                   </option>
