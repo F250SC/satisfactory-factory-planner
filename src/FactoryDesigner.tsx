@@ -576,9 +576,18 @@ export default function FactoryDesigner({
       if (belt.from.kind !== 'source') return belt
       const resourceId = sourceResourceById.get(belt.from.id)
       const resource = resources.find((entry) => entry.id === resourceId)
-      if (!resource || belt.tier === resource.config.belt) return belt
+      const source = nextSources.find((entry) => entry.id === belt.from.id)
+      const nextTier = resource?.config.belt ?? belt.tier
+      const nextRate = source?.rate ?? belt.plannedRate
+      if (
+        !resource ||
+        (belt.tier === nextTier &&
+          Math.abs((belt.plannedRate ?? nextRate ?? 0) - (nextRate ?? 0)) < 0.0001)
+      ) {
+        return belt
+      }
       beltsChanged = true
-      return { ...belt, tier: resource.config.belt }
+      return { ...belt, tier: nextTier, plannedRate: nextRate }
     })
 
     if (changed || beltsChanged) {
@@ -2110,8 +2119,11 @@ export default function FactoryDesigner({
     }
 
     if (endpoint.kind === 'node') {
-      const step = stepForNode(endpoint.id)
-      return step ? step.actualOutputRate / Math.max(1, step.machines) : 0
+      const outputs = machineOutputRates(endpoint.id)
+      const output = outputs.find(
+        (entry) => entry.port === (endpoint.port ?? 0),
+      )
+      return output?.rate ?? 0
     }
 
     const utility = normalized.utilities.find((entry) => entry.id === endpoint.id)
@@ -2138,6 +2150,17 @@ export default function FactoryDesigner({
       ).length,
     )
     return totalIn / outgoingCount
+  }
+
+  const flowForBelt = (belt: DesignerBelt) => {
+    if (
+      typeof belt.plannedRate === 'number' &&
+      Number.isFinite(belt.plannedRate) &&
+      belt.plannedRate >= 0
+    ) {
+      return belt.plannedRate
+    }
+    return flowForEndpoint(belt.from)
   }
 
   const selected = normalized.nodes.find((node) => node.id === selectedId)
@@ -2688,12 +2711,12 @@ export default function FactoryDesigner({
                 </span>
                 <strong>{activeBelts.length}</strong>
                 <small>
-                  {activeBelts.filter((belt) => flowForEndpoint(belt.from) > beltRates[belt.tier] + 0.001).length}{' '}
+                  {activeBelts.filter((belt) => flowForBelt(belt) > beltRates[belt.tier] + 0.001).length}{' '}
                   {lang === 'de' ? 'überlastet' : 'overloaded'}
                 </small>
               </summary>
               {activeBelts.map((belt) => {
-                const flow = flowForEndpoint(belt.from)
+                const flow = flowForBelt(belt)
                 const overloaded = flow > beltRates[belt.tier] + 0.001
                 return (
                   <div
@@ -2917,7 +2940,7 @@ export default function FactoryDesigner({
                 const from = portPoint(belt.from)
                 const to = portPoint(belt.to)
                 if (!from || !to) return null
-                const flow = flowForEndpoint(belt.from)
+                const flow = flowForBelt(belt)
                 const overloaded = flow > beltRates[belt.tier] + 0.001
                 const route = belt.waypoints?.length
                   ? routedPath(
@@ -3231,7 +3254,7 @@ export default function FactoryDesigner({
                         (entry) => (entry.to.port ?? 0) === input.port,
                       )
                       const incomingRate = belt
-                        ? flowForEndpoint(belt.from)
+                        ? flowForBelt(belt)
                         : 0
                       const usedRate = Math.min(incomingRate, input.rate)
                       const surplus = Math.max(0, incomingRate - input.rate)
@@ -3703,7 +3726,7 @@ export default function FactoryDesigner({
                 </button>
               </>
             ) : selectedBelt ? (() => {
-              const flow = flowForEndpoint(selectedBelt.from)
+              const flow = flowForBelt(selectedBelt)
               const overloaded = flow > beltRates[selectedBelt.tier] + 0.001
               return (
                 <>
