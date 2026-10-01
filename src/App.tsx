@@ -635,7 +635,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.20.2</div>
+          <div className="version">v0.21</div>
         </div>
       </header>
 
@@ -871,6 +871,9 @@ export default function App() {
               usedRate: result.rawUsed[id] ?? 0,
             }))}
             maxBeltTier={tier >= 9 ? 'mk6' : tier >= 7 ? 'mk5' : tier >= 5 ? 'mk4' : tier >= 4 ? 'mk3' : tier >= 2 ? 'mk2' : 'mk1'}
+            tier={tier}
+            clockControlUnlocked={clockControlUnlocked}
+            onResourceChange={setResource}
             layout={designerLayout}
             onChange={setDesignerLayout}
           />
