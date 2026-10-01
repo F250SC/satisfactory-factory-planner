@@ -108,6 +108,7 @@ export interface DesignerLayout {
   utilities?: DesignerUtility[]
   lifts?: DesignerLift[]
   belts?: DesignerBelt[]
+  planSignature?: string
 }
 
 interface PlannerResource {
@@ -189,6 +190,7 @@ function normalizeLayout(layout: DesignerLayout): Required<DesignerLayout> {
       from: normalizeEndpoint(belt.from, 'output'),
       to: normalizeEndpoint(belt.to, 'input'),
     })),
+    planSignature: layout.planSignature ?? '',
   }
 }
 
@@ -644,6 +646,34 @@ export default function FactoryDesigner({
     return [...map.values()]
   }, [steps])
 
+  const currentPlanSignature = useMemo(
+    () =>
+      JSON.stringify({
+        steps: steps
+          .map((step) => ({
+            item: step.item,
+            recipe: step.recipe.className,
+            machines: step.machines,
+            clocks: step.clocks.map(
+              (clock) => Math.round(clock * 10000) / 10000,
+            ),
+            output: Math.round(step.actualOutputRate * 10000) / 10000,
+          }))
+          .sort((a, b) => a.item.localeCompare(b.item)),
+        resources: resources
+          .map((resource) => ({
+            id: resource.id,
+            usedRate: Math.round(resource.usedRate * 10000) / 10000,
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      }),
+    [steps, resources],
+  )
+
+  const blueprintIsStale =
+    Boolean(normalized.planSignature) &&
+    normalized.planSignature !== currentPlanSignature
+
   const writeLayout = (
     nodes = normalized.nodes,
     floors = normalized.floors,
@@ -651,8 +681,17 @@ export default function FactoryDesigner({
     utilities = normalized.utilities,
     belts = normalized.belts,
     sources = normalized.sources,
+    planSignature = normalized.planSignature,
   ) => {
-    onChange({ nodes, floors, lifts, utilities, belts, sources })
+    onChange({
+      nodes,
+      floors,
+      lifts,
+      utilities,
+      belts,
+      sources,
+      planSignature,
+    })
   }
 
   const stepForNode = (nodeId: string) => {
@@ -2054,6 +2093,7 @@ export default function FactoryDesigner({
       [...keepUtilities, ...generatedUtilities],
       [...keepBelts, ...generatedBelts],
       [...keepSources, ...generatedSources],
+      currentPlanSignature,
     )
 
     const firstOnFloor = generatedNodes[0]
@@ -2643,6 +2683,17 @@ export default function FactoryDesigner({
               {lang === 'de' ? 'Aus Plan erzeugen' : 'Generate from plan'}
             </button>
           </div>
+
+          {blueprintIsStale && (
+            <div className="blueprint-stale-warning">
+              <AlertTriangle size={15} />
+              <span>
+                {lang === 'de'
+                  ? 'Der Produktionsplan wurde seit der Blueprint-Erzeugung geändert. Der bestehende Blueprint bleibt erhalten, bis du ihn bewusst neu erzeugst.'
+                  : 'The production plan changed after this blueprint was generated. The existing blueprint is preserved until you explicitly regenerate it.'}
+              </span>
+            </div>
+          )}
 
           <div className="conveyor-tools">
             <span className="eyebrow">
