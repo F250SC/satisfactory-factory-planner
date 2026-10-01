@@ -924,8 +924,10 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
             counts.input,
           )
           return (
-            <button
+            <span
               key={`in-${index}`}
+              role="button"
+              tabIndex={0}
               className="machine-port input-port"
               style={{
                 left: point.x - rectPx.left - PORT_SIZE / 2,
@@ -940,6 +942,18 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
                   side: 'input',
                   port: index,
                 })
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  connectTo({
+                    kind: endpointKind,
+                    id,
+                    side: 'input',
+                    port: index,
+                  })
+                }
               }}
             />
           )
@@ -962,8 +976,10 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
               })
 
           return (
-            <button
+            <span
               key={`out-${index}`}
+              role="button"
+              tabIndex={0}
               className={`machine-port output-port ${active ? 'active' : ''}`}
               style={{
                 left: point.x - rectPx.left - PORT_SIZE / 2,
@@ -978,6 +994,18 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
                   side: 'output',
                   port: index,
                 })
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  connectTo({
+                    kind: endpointKind,
+                    id,
+                    side: 'output',
+                    port: index,
+                  })
+                }
               }}
             />
           )
