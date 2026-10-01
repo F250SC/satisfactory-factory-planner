@@ -1275,6 +1275,48 @@ export default function FactoryDesigner({
       return
     }
 
+    const sourceOccupied = normalized.belts.some(
+      (belt) => endpointKey(belt.from) === endpointKey(connectFrom),
+    )
+    if (sourceOccupied) {
+      setPlacementError(
+        lang === 'de'
+          ? 'Dieser Ausgang ist bereits mit einem Förderband verbunden.'
+          : 'This output port already has a conveyor connection.',
+      )
+      setConnectFrom(null)
+      return
+    }
+
+    const targetOccupied = normalized.belts.some(
+      (belt) => endpointKey(belt.to) === endpointKey(normalizedTarget),
+    )
+    if (targetOccupied) {
+      setPlacementError(
+        lang === 'de'
+          ? 'Dieser Eingang ist bereits mit einem Förderband verbunden.'
+          : 'This input port already has a conveyor connection.',
+      )
+      setConnectFrom(null)
+      return
+    }
+
+    const sourceMaterial = materialForEndpoint(connectFrom)
+    const targetMaterial = materialForEndpoint(normalizedTarget)
+    if (
+      sourceMaterial &&
+      targetMaterial &&
+      sourceMaterial !== targetMaterial
+    ) {
+      setPlacementError(
+        lang === 'de'
+          ? `Material passt nicht: ${itemName(sourceMaterial, lang)} kann nicht an einen Eingang für ${itemName(targetMaterial, lang)} angeschlossen werden.`
+          : `Material mismatch: ${itemName(sourceMaterial, lang)} cannot connect to an input for ${itemName(targetMaterial, lang)}.`,
+      )
+      setConnectFrom(null)
+      return
+    }
+
     const exists = normalized.belts.some(
       (belt) =>
         endpointKey(belt.from) === endpointKey(connectFrom) &&
