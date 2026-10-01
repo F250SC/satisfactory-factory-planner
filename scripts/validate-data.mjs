@@ -1,4 +1,6 @@
+import fs from 'node:fs/promises'
 import gameData from '../src/gameData.json' with { type: 'json' }
+import progressionData from '../src/progressionData.json' with { type: 'json' }
 
 const errors = []
 const warnings = []
@@ -81,8 +83,71 @@ for (const [id, building] of Object.entries(buildings)) {
   }
 }
 
+const schematics = Array.isArray(progressionData.schematics)
+  ? progressionData.schematics
+  : []
+const schematicIds = new Set()
+
+for (const schematic of schematics) {
+  if (!schematic?.id) {
+    error('Progression schematic without id found.')
+    continue
+  }
+  if (schematicIds.has(schematic.id)) {
+    error(`Duplicate progression schematic id: ${schematic.id}`)
+  }
+  schematicIds.add(schematic.id)
+
+  for (const recipeId of schematic.recipes ?? []) {
+    if (!recipeIds.has(recipeId)) {
+      error(
+        `Progression schematic ${schematic.id} references unknown recipe: ${recipeId}`,
+      )
+    }
+  }
+
+  for (const buildingId of schematic.buildings ?? []) {
+    if (!buildings[buildingId]) {
+      error(
+        `Progression schematic ${schematic.id} references unknown building: ${buildingId}`,
+      )
+    }
+  }
+}
+
+for (const schematic of schematics) {
+  for (const requirement of schematic.requiredSchematics ?? []) {
+    if (
+      requirement.startsWith('Schematic_') &&
+      !schematicIds.has(requirement)
+    ) {
+      warn(
+        `Progression schematic ${schematic.id} references external/unknown prerequisite: ${requirement}`,
+      )
+    }
+  }
+}
+
+const footprintSource = await fs.readFile(
+  new URL('../src/buildingFootprints.ts', import.meta.url),
+  'utf8',
+)
+const footprintIds = new Set(
+  [...footprintSource.matchAll(/^\s*(Desc_[A-Za-z0-9_]+_C):\s*\{/gm)].map(
+    (match) => match[1],
+  ),
+)
+
+for (const buildingId of Object.keys(buildings)) {
+  if (!footprintIds.has(buildingId)) {
+    error(
+      `Production building ${buildingId} has no explicit Factory Designer footprint.`,
+    )
+  }
+}
+
 console.log(
-  `Validated ${recipes.length} recipes, ${Object.keys(items).length} items, ${Object.keys(buildings).length} buildings and ${resources.length} raw resources.`,
+  `Validated ${recipes.length} recipes, ${Object.keys(items).length} items, ${Object.keys(buildings).length} buildings, ${resources.length} raw resources and ${schematics.length} progression schematics.`,
 )
 
 for (const message of warnings) console.warn(`WARN: ${message}`)
