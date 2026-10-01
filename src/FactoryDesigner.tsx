@@ -2377,8 +2377,15 @@ export default function FactoryDesigner({
                 const overloaded = flow > beltRates[belt.tier] + 0.001
                 return (
                   <div
-                    className={`belt-list-item ${overloaded ? 'overloaded' : ''}`}
+                    className={`belt-list-item ${overloaded ? 'overloaded' : ''} ${selectedBeltId === belt.id ? 'selected' : ''}`}
                     key={belt.id}
+                    onClick={() => {
+                      setSelectedBeltId(belt.id)
+                      setSelectedId(null)
+                      setSelectedUtilityId(null)
+                      setSelectedSourceId(null)
+                      setSelectedLiftId(null)
+                    }}
                   >
                     <div className="belt-material-info">
                       <span
@@ -2400,7 +2407,10 @@ export default function FactoryDesigner({
                     {overloaded && <AlertTriangle size={14} />}
                     <button
                       className="icon-delete"
-                      onClick={() => removeBelt(belt.id)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        removeBelt(belt.id)
+                      }}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -2476,7 +2486,7 @@ export default function FactoryDesigner({
             onPointerDown={(e) => {
               if (e.button !== 0) return
               const target = e.target as HTMLElement
-              if (target.closest('.factory-node, .factory-source, .factory-utility, .factory-lift, .machine-port')) return
+              if (target.closest('.factory-node, .factory-source, .factory-utility, .factory-lift, .machine-port, .belt-waypoint, .belt-hit-path')) return
               setIsPanning(true)
               setPanAnchor({ x: e.clientX - pan.x, y: e.clientY - pan.y })
               e.currentTarget.setPointerCapture(e.pointerId)
@@ -2578,7 +2588,7 @@ export default function FactoryDesigner({
                 </marker>
               </defs>
 
-              {activeBelts.map((belt) => {
+              {activeBelts.map((belt, beltIndex) => {
                 const from = portPoint(belt.from)
                 const to = portPoint(belt.to)
                 if (!from || !to) return null
@@ -2852,6 +2862,137 @@ export default function FactoryDesigner({
             </div>
           </div>
         </section>
+
+        <aside className="selection-inspector card">
+          {selectedBelt ? (() => {
+            const flow = flowForEndpoint(selectedBelt.from)
+            const overloaded = flow > beltRates[selectedBelt.tier] + 0.001
+            return (
+              <>
+                <div className="selection-inspector-head">
+                  <span className="eyebrow">
+                    {lang === 'de' ? 'Ausgewähltes Förderband' : 'Selected conveyor'}
+                  </span>
+                  <h2>
+                    {selectedBelt.materialId
+                      ? itemName(selectedBelt.materialId, lang)
+                      : (lang === 'de' ? 'Förderband' : 'Conveyor')}
+                  </h2>
+                  <div
+                    className="inspector-material-line"
+                    style={{ background: materialColor(selectedBelt.materialId) }}
+                  />
+                </div>
+
+                <div className="inspector-stat-grid">
+                  <div>
+                    <span>{lang === 'de' ? 'Durchsatz' : 'Flow'}</span>
+                    <strong>{Math.round(flow * 100) / 100}/min</strong>
+                  </div>
+                  <div className={overloaded ? 'danger-stat' : ''}>
+                    <span>{lang === 'de' ? 'Kapazität' : 'Capacity'}</span>
+                    <strong>{beltRates[selectedBelt.tier]}/min</strong>
+                  </div>
+                </div>
+
+                <label>
+                  {lang === 'de' ? 'Förderband' : 'Conveyor tier'}
+                  <select
+                    value={selectedBelt.tier}
+                    onChange={(e) =>
+                      updateBelt(selectedBelt.id, {
+                        tier: e.target.value as BeltTier,
+                      })
+                    }
+                  >
+                    {(Object.keys(beltRates) as BeltTier[])
+                      .filter((tier) => Number(tier.slice(2)) <= Number(maxBeltTier.slice(2)))
+                      .map((tier) => (
+                        <option key={tier} value={tier}>
+                          Mk.{tier.slice(2)} · {beltRates[tier]}/min
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <div className="belt-endpoints">
+                  <div>
+                    <span>{lang === 'de' ? 'Von' : 'From'}</span>
+                    <strong>{endpointLabel(selectedBelt.from)}</strong>
+                  </div>
+                  <div>
+                    <span>{lang === 'de' ? 'Nach' : 'To'}</span>
+                    <strong>{endpointLabel(selectedBelt.to)}</strong>
+                  </div>
+                </div>
+
+                <div className="belt-editor-section">
+                  <span className="eyebrow">
+                    {lang === 'de' ? 'Linienführung' : 'Routing'}
+                  </span>
+                  <div className="route-style-buttons">
+                    <button
+                      className={`action-button ${(selectedBelt.routeStyle ?? 'orthogonal') === 'orthogonal' ? 'tool-active' : ''}`}
+                      onClick={() => updateBelt(selectedBelt.id, { routeStyle: 'orthogonal' })}
+                    >
+                      {lang === 'de' ? 'Eckig' : 'Angular'}
+                    </button>
+                    <button
+                      className={`action-button ${selectedBelt.routeStyle === 'smooth' ? 'tool-active' : ''}`}
+                      onClick={() => updateBelt(selectedBelt.id, { routeStyle: 'smooth' })}
+                    >
+                      {lang === 'de' ? 'Abgerundet' : 'Smooth'}
+                    </button>
+                  </div>
+
+                  <button
+                    className="action-button"
+                    onClick={() => addBeltWaypoint(selectedBelt.id)}
+                  >
+                    <Plus size={15} />
+                    {lang === 'de' ? 'Wegpunkt hinzufügen' : 'Add waypoint'}
+                  </button>
+
+                  {(selectedBelt.waypoints?.length ?? 0) > 0 && (
+                    <>
+                      <p className="inspector-help">
+                        {lang === 'de'
+                          ? 'Die runden Punkte im Blueprint kannst du frei ziehen. Doppelklick entfernt einen Wegpunkt.'
+                          : 'Drag the round handles in the blueprint. Double-click removes a waypoint.'}
+                      </p>
+                      <button
+                        className="action-button"
+                        onClick={() => updateBelt(selectedBelt.id, { waypoints: [] })}
+                      >
+                        {lang === 'de' ? 'Route zurücksetzen' : 'Reset route'}
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  className="action-button danger inspector-delete"
+                  onClick={() => removeBelt(selectedBelt.id)}
+                >
+                  <Trash2 size={15} />
+                  {lang === 'de' ? 'Förderband löschen' : 'Delete conveyor'}
+                </button>
+              </>
+            )
+          })() : (
+            <div className="empty-inspector">
+              <span className="eyebrow">
+                {lang === 'de' ? 'Eigenschaften' : 'Properties'}
+              </span>
+              <h2>{lang === 'de' ? 'Element auswählen' : 'Select an element'}</h2>
+              <p>
+                {lang === 'de'
+                  ? 'Klicke auf ein Förderband, um Durchsatz, Belt-Stufe und Linienführung hier zu bearbeiten.'
+                  : 'Click a conveyor belt to edit flow, tier and routing here.'}
+              </p>
+            </div>
+          )}
+        </aside>
       </section>
     </section>
   )
