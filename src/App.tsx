@@ -461,7 +461,7 @@ export default function App() {
     setClockControlUnlocked(Boolean(snapshot.clockControlUnlocked))
     setProductionShards(snapshot.productionShards ?? 0)
     setResourceConfigs(snapshot.resourceConfigs ?? {})
-    setDesignerLayout(snapshot.designerLayout ?? { nodes: [] })
+    setDesignerLayout(snapshot.designerLayout ?? { nodes: [], floors: [{ id: 'floor-ground', name: 'EG', elevationM: 0 }], lifts: [] })
   }
 
   useEffect(() => {
@@ -633,7 +633,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <button className="language-button" onClick={() => setLang(lang === 'de' ? 'en' : 'de')}><Languages size={15} /> {lang.toUpperCase()}</button>
-          <div className="version">v0.11</div>
+          <div className="version">v0.12</div>
         </div>
       </header>
 
