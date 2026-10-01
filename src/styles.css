@@ -1013,3 +1013,120 @@ select:focus, input:focus { border-color: #f28c28; }
     flex: 1;
   }
 }
+
+
+/* v0.13 conveyor network */
+.conveyor-tools {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #2b3440;
+  display: grid;
+  gap: 10px;
+}
+.conveyor-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.connect-mode {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid #7a4f25;
+  border-radius: 9px;
+  background: #2b1d10;
+  color: #f0bd82;
+  font-size: 11px;
+}
+.connect-mode button {
+  border: 0;
+  background: transparent;
+  color: #f0bd82;
+  font-size: 18px;
+  line-height: 1;
+}
+.belt-list {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #2b3440;
+  display: grid;
+  gap: 7px;
+}
+.belt-list-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 9px;
+  border: 1px solid #2f3946;
+  border-radius: 9px;
+  background: #10161d;
+}
+.belt-list-item strong,
+.belt-list-item small {
+  display: block;
+}
+.belt-list-item small {
+  margin-top: 2px;
+  color: #73808e;
+}
+.belt-list-item.overloaded {
+  border-color: #7a3e2d;
+  background: #291713;
+}
+.belt-list-item.overloaded > svg {
+  color: #e88b67;
+}
+.belt-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+.belt-path {
+  fill: none;
+  stroke: #cf852f;
+  stroke-width: 5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: .9;
+}
+.belt-path.overloaded {
+  stroke: #d85b45;
+  stroke-dasharray: 10 7;
+}
+.belt-label {
+  fill: #d9e0e7;
+  font-size: 10px;
+  paint-order: stroke;
+  stroke: #10161d;
+  stroke-width: 3px;
+}
+.factory-utility {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #536273;
+  border-radius: 6px;
+  background: #17202a;
+  color: #d4dde7;
+}
+.factory-utility.selected,
+.factory-utility.connecting,
+.factory-node.connecting {
+  border-color: #f28c28;
+  box-shadow: 0 0 0 2px rgba(242,140,40,.25);
+}
+.factory-utility:hover {
+  border-color: #f28c28;
+}
+@media (max-width: 600px) {
+  .conveyor-tool-grid {
+    grid-template-columns: 1fr;
+  }
+}
