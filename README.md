@@ -4,7 +4,7 @@ A resource-first production planner for **Satisfactory**.
 
 Instead of starting with a desired output rate, the planner starts with the resource nodes, extractors and transport technology you actually have and calculates what production is possible.
 
-## v0.3
+## v0.4
 
 - Complete automatable production dataset: **276 machine recipes**
 - Standard and alternate recipes
@@ -19,9 +19,14 @@ Instead of starting with a desired output rate, the planner starts with the reso
 - Pipeline Mk.1 / Mk.2 limits
 - Solid, oil, water and nitrogen extraction
 - Configurable number of nodes/extractors
-- Practical clock planning with selectable maximum clock: 100%, 150%, 200% or 250%
-- Exact final-machine underclocking where needed
-- Per-stage in-game clock setup (for example 1×100% + 1×33.33%)
+- Progression-aware clock control: before MAM research all configurable buildings stay at 100%
+- Underclocking becomes available with the MAM “Overclock Production” research
+- Power Shard limits: 0/1/2/3 shards = 100/150/200/250% maximum
+- Resource extractors/miners can be clocked independently once the research is unlocked
+- Exact final-machine underclocking where needed, stored/displayed up to four decimal places
+- Per-stage in-game clock setup (for example 1×100% + 1×33.3333%)
+- Original Satisfactory item imagery in the planner and machine imagery where available
+- Expanded German item/recipe translations with English fallback
 - Estimated power calculation using Satisfactory's production-machine clock exponent
 - Resource surplus and transport bottleneck status
 - German / English interface
