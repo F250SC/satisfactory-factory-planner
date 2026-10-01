@@ -2984,142 +2984,366 @@ export default function FactoryDesigner({
           </div>
         </section>
 
-        <aside className="selection-inspector card">
-          {selectedBelt ? (() => {
-            const flow = flowForEndpoint(selectedBelt.from)
-            const overloaded = flow > beltRates[selectedBelt.tier] + 0.001
-            return (
+        {hasSelection && (
+          <aside className="selection-inspector card">
+            {selected && selectedFootprint ? (
               <>
                 <div className="selection-inspector-head">
                   <span className="eyebrow">
-                    {lang === 'de' ? 'Ausgewähltes Förderband' : 'Selected conveyor'}
+                    {lang === 'de' ? 'Ausgewählte Maschine' : 'Selected machine'}
                   </span>
-                  <h2>
-                    {selectedBelt.materialId
-                      ? itemName(selectedBelt.materialId, lang)
-                      : (lang === 'de' ? 'Förderband' : 'Conveyor')}
-                  </h2>
-                  <div
-                    className="inspector-material-line"
-                    style={{ background: materialColor(selectedBelt.materialId) }}
-                  />
+                  <h2>{machineLabel(selected.machineId)}</h2>
+                  <p>{itemName(selected.itemId, lang)}</p>
                 </div>
 
                 <div className="inspector-stat-grid">
                   <div>
-                    <span>{lang === 'de' ? 'Durchsatz' : 'Flow'}</span>
-                    <strong>{Math.round(flow * 100) / 100}/min</strong>
-                  </div>
-                  <div className={overloaded ? 'danger-stat' : ''}>
-                    <span>{lang === 'de' ? 'Kapazität' : 'Capacity'}</span>
-                    <strong>{beltRates[selectedBelt.tier]}/min</strong>
-                  </div>
-                </div>
-
-                <label>
-                  {lang === 'de' ? 'Förderband' : 'Conveyor tier'}
-                  <select
-                    value={selectedBelt.tier}
-                    onChange={(e) =>
-                      updateBelt(selectedBelt.id, {
-                        tier: e.target.value as BeltTier,
-                      })
-                    }
-                  >
-                    {(Object.keys(beltRates) as BeltTier[])
-                      .filter((tier) => Number(tier.slice(2)) <= Number(maxBeltTier.slice(2)))
-                      .map((tier) => (
-                        <option key={tier} value={tier}>
-                          Mk.{tier.slice(2)} · {beltRates[tier]}/min
-                        </option>
-                      ))}
-                  </select>
-                </label>
-
-                <div className="belt-endpoints">
-                  <div>
-                    <span>{lang === 'de' ? 'Von' : 'From'}</span>
-                    <strong>{endpointLabel(selectedBelt.from)}</strong>
+                    <span>Ports</span>
+                    <strong>
+                      {portCounts({ kind: 'node', id: selected.id }).input} In ·{' '}
+                      {portCounts({ kind: 'node', id: selected.id }).output} Out
+                    </strong>
                   </div>
                   <div>
-                    <span>{lang === 'de' ? 'Nach' : 'To'}</span>
-                    <strong>{endpointLabel(selectedBelt.to)}</strong>
+                    <span>{lang === 'de' ? 'Rotation' : 'Rotation'}</span>
+                    <strong>{selected.rotation}°</strong>
+                  </div>
+                  <div>
+                    <span>{lang === 'de' ? 'Grundfläche' : 'Footprint'}</span>
+                    <strong>
+                      {selectedFootprint.widthM} × {selectedFootprint.lengthM} m
+                    </strong>
+                  </div>
+                  <div>
+                    <span>{lang === 'de' ? 'Höhe' : 'Height'}</span>
+                    <strong>{selectedFootprint.heightM} m</strong>
                   </div>
                 </div>
 
                 <div className="belt-editor-section">
-                  <span className="eyebrow">
-                    {lang === 'de' ? 'Linienführung' : 'Routing'}
-                  </span>
-                  <div className="route-style-buttons">
-                    <button
-                      className={`action-button ${selectedBelt.routeStyle === 'straight' ? 'tool-active' : ''}`}
-                      onClick={() => updateBelt(selectedBelt.id, { routeStyle: 'straight' })}
-                    >
-                      {lang === 'de' ? 'Gerade' : 'Straight'}
-                    </button>
-                    <button
-                      className={`action-button ${(selectedBelt.routeStyle ?? 'orthogonal') === 'orthogonal' ? 'tool-active' : ''}`}
-                      onClick={() => updateBelt(selectedBelt.id, { routeStyle: 'orthogonal' })}
-                    >
-                      {lang === 'de' ? 'Eckig' : 'Angular'}
-                    </button>
-                    <button
-                      className={`action-button ${selectedBelt.routeStyle === 'smooth' ? 'tool-active' : ''}`}
-                      onClick={() => updateBelt(selectedBelt.id, { routeStyle: 'smooth' })}
-                    >
-                      {lang === 'de' ? 'Abgerundet' : 'Smooth'}
-                    </button>
-                  </div>
-
                   <button
                     className="action-button"
-                    onClick={() => addBeltWaypoint(selectedBelt.id)}
+                    onClick={() => {
+                      setBeltToolActive(true)
+                      setConnectFrom({
+                        kind: 'node',
+                        id: selected.id,
+                        side: 'output',
+                        port: 0,
+                      })
+                      setPlacementError(null)
+                    }}
                   >
-                    <Plus size={15} />
-                    {lang === 'de' ? 'Wegpunkt hinzufügen' : 'Add waypoint'}
+                    <Unplug size={15} />
+                    {lang === 'de' ? 'Verbindung starten' : 'Start connection'}
                   </button>
-
-                  {(selectedBelt.waypoints?.length ?? 0) > 0 && (
-                    <>
-                      <p className="inspector-help">
-                        {lang === 'de'
-                          ? 'Die runden Punkte im Blueprint kannst du frei ziehen. Doppelklick entfernt einen Wegpunkt.'
-                          : 'Drag the round handles in the blueprint. Double-click removes a waypoint.'}
-                      </p>
-                      <button
-                        className="action-button"
-                        onClick={() => updateBelt(selectedBelt.id, { waypoints: [] })}
-                      >
-                        {lang === 'de' ? 'Route zurücksetzen' : 'Reset route'}
-                      </button>
-                    </>
-                  )}
+                  <button
+                    className="action-button"
+                    onClick={() => rotateNode(selected.id)}
+                  >
+                    <RotateCw size={15} />
+                    {lang === 'de' ? '90° drehen' : 'Rotate 90°'}
+                  </button>
                 </div>
 
                 <button
                   className="action-button danger inspector-delete"
-                  onClick={() => removeBelt(selectedBelt.id)}
+                  onClick={() => removeNode(selected.id)}
                 >
                   <Trash2 size={15} />
-                  {lang === 'de' ? 'Förderband löschen' : 'Delete conveyor'}
+                  {lang === 'de' ? 'Maschine löschen' : 'Delete machine'}
                 </button>
               </>
-            )
-          })() : (
-            <div className="empty-inspector">
-              <span className="eyebrow">
-                {lang === 'de' ? 'Eigenschaften' : 'Properties'}
-              </span>
-              <h2>{lang === 'de' ? 'Element auswählen' : 'Select an element'}</h2>
-              <p>
-                {lang === 'de'
-                  ? 'Klicke auf ein Förderband, um Durchsatz, Belt-Stufe und Linienführung hier zu bearbeiten.'
-                  : 'Click a conveyor belt to edit flow, tier and routing here.'}
-              </p>
-            </div>
-          )}
-        </aside>
+            ) : selectedSource ? (
+              <>
+                <div className="selection-inspector-head">
+                  <span className="eyebrow">
+                    {lang === 'de' ? 'Rohstoffquelle' : 'Resource source'}
+                  </span>
+                  <h2>
+                    {resourceMeta[selectedSource.resourceId]?.[lang] ??
+                      itemName(selectedSource.resourceId, lang)}
+                  </h2>
+                  <p>Miner Mk.{selectedSource.miner.slice(2)}</p>
+                </div>
+
+                <div className="inspector-stat-grid">
+                  <div>
+                    <span>{lang === 'de' ? 'Förderrate' : 'Rate'}</span>
+                    <strong>{Math.round(selectedSource.rate * 100) / 100}/min</strong>
+                  </div>
+                  <div>
+                    <span>{lang === 'de' ? 'Position' : 'Position'}</span>
+                    <strong>{selectedSource.x} / {selectedSource.y}</strong>
+                  </div>
+                </div>
+
+                <div className="belt-editor-section">
+                  <button
+                    className="action-button"
+                    onClick={() => {
+                      setBeltToolActive(true)
+                      setConnectFrom({
+                        kind: 'source',
+                        id: selectedSource.id,
+                        side: 'output',
+                        port: 0,
+                      })
+                      setPlacementError(null)
+                    }}
+                  >
+                    <Unplug size={15} />
+                    {lang === 'de' ? 'Verbindung starten' : 'Start connection'}
+                  </button>
+                </div>
+
+                <button
+                  className="action-button danger inspector-delete"
+                  onClick={() => removeSource(selectedSource.id)}
+                >
+                  <Trash2 size={15} />
+                  {lang === 'de' ? 'Rohstoffquelle löschen' : 'Delete source'}
+                </button>
+              </>
+            ) : selectedUtility ? (
+              <>
+                <div className="selection-inspector-head">
+                  <span className="eyebrow">
+                    {lang === 'de' ? 'Fördertechnik' : 'Conveyor utility'}
+                  </span>
+                  <h2>
+                    {selectedUtility.kind === 'splitter' ? 'Splitter' : 'Merger'}
+                  </h2>
+                  <p>
+                    {selectedUtility.kind === 'splitter'
+                      ? '1 Input · 3 Outputs'
+                      : '3 Inputs · 1 Output'}
+                  </p>
+                </div>
+
+                <div className="inspector-stat-grid">
+                  <div>
+                    <span>{lang === 'de' ? 'Rotation' : 'Rotation'}</span>
+                    <strong>{selectedUtility.rotation}°</strong>
+                  </div>
+                  <div>
+                    <span>{lang === 'de' ? 'Position' : 'Position'}</span>
+                    <strong>{selectedUtility.x} / {selectedUtility.y}</strong>
+                  </div>
+                </div>
+
+                <div className="belt-editor-section">
+                  <button
+                    className="action-button"
+                    onClick={() => {
+                      setBeltToolActive(true)
+                      setConnectFrom({
+                        kind: 'utility',
+                        id: selectedUtility.id,
+                        side: 'output',
+                        port: 0,
+                      })
+                      setPlacementError(null)
+                    }}
+                  >
+                    <Unplug size={15} />
+                    {lang === 'de' ? 'Verbindung starten' : 'Start connection'}
+                  </button>
+                  <button
+                    className="action-button"
+                    onClick={() => rotateUtility(selectedUtility.id)}
+                  >
+                    <RotateCw size={15} />
+                    {lang === 'de' ? '90° drehen' : 'Rotate 90°'}
+                  </button>
+                </div>
+
+                <button
+                  className="action-button danger inspector-delete"
+                  onClick={() => removeUtility(selectedUtility.id)}
+                >
+                  <Trash2 size={15} />
+                  {lang === 'de' ? 'Element löschen' : 'Delete element'}
+                </button>
+              </>
+            ) : selectedLift ? (
+              <>
+                <div className="selection-inspector-head">
+                  <span className="eyebrow">Conveyor Lift</span>
+                  <h2>{lang === 'de' ? 'Etagenverbindung' : 'Floor connection'}</h2>
+                </div>
+
+                <div className="belt-endpoints">
+                  <div>
+                    <span>{lang === 'de' ? 'Von' : 'From'}</span>
+                    <strong>
+                      {normalized.floors.find((floor) => floor.id === selectedLift.fromFloorId)?.name ?? '?'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>{lang === 'de' ? 'Nach' : 'To'}</span>
+                    <strong>
+                      {normalized.floors.find((floor) => floor.id === selectedLift.toFloorId)?.name ?? '?'}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="inspector-stat-grid">
+                  <div>
+                    <span>{lang === 'de' ? 'Raster X' : 'Grid X'}</span>
+                    <strong>{selectedLift.x}</strong>
+                  </div>
+                  <div>
+                    <span>{lang === 'de' ? 'Raster Y' : 'Grid Y'}</span>
+                    <strong>{selectedLift.y}</strong>
+                  </div>
+                </div>
+
+                <button
+                  className="action-button danger inspector-delete"
+                  onClick={() => removeLift(selectedLift.id)}
+                >
+                  <Trash2 size={15} />
+                  {lang === 'de' ? 'Lift löschen' : 'Delete lift'}
+                </button>
+              </>
+            ) : selectedBelt ? (() => {
+              const flow = flowForEndpoint(selectedBelt.from)
+              const overloaded = flow > beltRates[selectedBelt.tier] + 0.001
+              return (
+                <>
+                  <div className="selection-inspector-head">
+                    <span className="eyebrow">
+                      {lang === 'de' ? 'Ausgewähltes Förderband' : 'Selected conveyor'}
+                    </span>
+                    <h2>
+                      {selectedBelt.materialId
+                        ? itemName(selectedBelt.materialId, lang)
+                        : (lang === 'de' ? 'Förderband' : 'Conveyor')}
+                    </h2>
+                    <div
+                      className="inspector-material-line"
+                      style={{ background: materialColor(selectedBelt.materialId) }}
+                    />
+                  </div>
+
+                  <div className="inspector-stat-grid">
+                    <div>
+                      <span>{lang === 'de' ? 'Durchsatz' : 'Flow'}</span>
+                      <strong>{Math.round(flow * 100) / 100}/min</strong>
+                    </div>
+                    <div className={overloaded ? 'danger-stat' : ''}>
+                      <span>{lang === 'de' ? 'Kapazität' : 'Capacity'}</span>
+                      <strong>{beltRates[selectedBelt.tier]}/min</strong>
+                    </div>
+                  </div>
+
+                  <label>
+                    {lang === 'de' ? 'Förderband' : 'Conveyor tier'}
+                    <select
+                      value={selectedBelt.tier}
+                      onChange={(e) =>
+                        updateBelt(selectedBelt.id, {
+                          tier: e.target.value as BeltTier,
+                        })
+                      }
+                    >
+                      {(Object.keys(beltRates) as BeltTier[])
+                        .filter(
+                          (tier) =>
+                            Number(tier.slice(2)) <= Number(maxBeltTier.slice(2)),
+                        )
+                        .map((tier) => (
+                          <option key={tier} value={tier}>
+                            Mk.{tier.slice(2)} · {beltRates[tier]}/min
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+
+                  <div className="belt-endpoints">
+                    <div>
+                      <span>{lang === 'de' ? 'Von' : 'From'}</span>
+                      <strong>{endpointLabel(selectedBelt.from)}</strong>
+                    </div>
+                    <div>
+                      <span>{lang === 'de' ? 'Nach' : 'To'}</span>
+                      <strong>{endpointLabel(selectedBelt.to)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="belt-editor-section">
+                    <span className="eyebrow">
+                      {lang === 'de' ? 'Linienführung' : 'Routing'}
+                    </span>
+                    <div className="route-style-buttons">
+                      <button
+                        className={`action-button ${selectedBelt.routeStyle === 'straight' ? 'tool-active' : ''}`}
+                        onClick={() =>
+                          updateBelt(selectedBelt.id, { routeStyle: 'straight' })
+                        }
+                      >
+                        {lang === 'de' ? 'Gerade' : 'Straight'}
+                      </button>
+                      <button
+                        className={`action-button ${(selectedBelt.routeStyle ?? 'orthogonal') === 'orthogonal' ? 'tool-active' : ''}`}
+                        onClick={() =>
+                          updateBelt(selectedBelt.id, {
+                            routeStyle: 'orthogonal',
+                          })
+                        }
+                      >
+                        {lang === 'de' ? 'Eckig' : 'Angular'}
+                      </button>
+                      <button
+                        className={`action-button ${selectedBelt.routeStyle === 'smooth' ? 'tool-active' : ''}`}
+                        onClick={() =>
+                          updateBelt(selectedBelt.id, { routeStyle: 'smooth' })
+                        }
+                      >
+                        {lang === 'de' ? 'Abgerundet' : 'Smooth'}
+                      </button>
+                    </div>
+
+                    <button
+                      className="action-button"
+                      onClick={() => addBeltWaypoint(selectedBelt.id)}
+                    >
+                      <Plus size={15} />
+                      {lang === 'de' ? 'Wegpunkt hinzufügen' : 'Add waypoint'}
+                    </button>
+
+                    {(selectedBelt.waypoints?.length ?? 0) > 0 && (
+                      <>
+                        <p className="inspector-help">
+                          {lang === 'de'
+                            ? 'Die runden Punkte im Blueprint kannst du frei ziehen. Doppelklick entfernt einen Wegpunkt.'
+                            : 'Drag the round handles in the blueprint. Double-click removes a waypoint.'}
+                        </p>
+                        <button
+                          className="action-button"
+                          onClick={() =>
+                            updateBelt(selectedBelt.id, { waypoints: [] })
+                          }
+                        >
+                          {lang === 'de' ? 'Route zurücksetzen' : 'Reset route'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <button
+                    className="action-button danger inspector-delete"
+                    onClick={() => removeBelt(selectedBelt.id)}
+                  >
+                    <Trash2 size={15} />
+                    {lang === 'de' ? 'Förderband löschen' : 'Delete conveyor'}
+                  </button>
+                </>
+              )
+            })() : null}
+          </aside>
+        )}
       </section>
     </section>
   )
