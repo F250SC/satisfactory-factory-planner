@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDownUp,
@@ -115,6 +115,13 @@ export default function FactoryDesigner({ lang, steps, layout, onChange }: Props
   const activeFloor =
     normalized.floors.find((floor) => floor.id === activeFloorId) ??
     normalized.floors[0]
+
+  useEffect(() => {
+    if (!normalized.floors.some((floor) => floor.id === activeFloorId)) {
+      setActiveFloorId(normalized.floors[0].id)
+      setSelectedId(null)
+    }
+  }, [layout, activeFloorId])
 
   const activeNodes = normalized.nodes.filter(
     (node) => (node.floorId ?? normalized.floors[0].id) === activeFloor.id,
