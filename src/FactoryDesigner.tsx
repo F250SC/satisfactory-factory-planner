@@ -1966,8 +1966,14 @@ export default function FactoryDesigner({
                     className={`belt-list-item ${overloaded ? 'overloaded' : ''}`}
                     key={belt.id}
                   >
-                    <div>
+                    <div className="belt-material-info">
+                      <span
+                        className="belt-material-dot"
+                        style={{ background: materialColor(belt.materialId) }}
+                      />
+                      <div>
                       <strong>
+                        {belt.materialId ? `${itemName(belt.materialId, lang)} · ` : ''}
                         Mk.{belt.tier.slice(2)} ·{' '}
                         {Math.round(flow * 100) / 100}/min
                       </strong>
@@ -1975,6 +1981,7 @@ export default function FactoryDesigner({
                         {lang === 'de' ? 'Kapazität' : 'Capacity'}:{' '}
                         {beltRates[belt.tier]}/min
                       </small>
+                      </div>
                     </div>
                     {overloaded && <AlertTriangle size={14} />}
                     <button
@@ -2126,7 +2133,7 @@ export default function FactoryDesigner({
                   orient="auto"
                   markerUnits="strokeWidth"
                 >
-                  <path d="M0,0 L8,4 L0,8 z" className="belt-arrow-head" />
+                  <path d="M0,0 L8,4 L0,8 z" fill="context-stroke" />
                 </marker>
                 <marker
                   id="belt-arrow-overloaded"
@@ -2137,10 +2144,7 @@ export default function FactoryDesigner({
                   orient="auto"
                   markerUnits="strokeWidth"
                 >
-                  <path
-                    d="M0,0 L8,4 L0,8 z"
-                    className="belt-arrow-head overloaded"
-                  />
+                  <path d="M0,0 L8,4 L0,8 z" fill="context-stroke" />
                 </marker>
               </defs>
 
