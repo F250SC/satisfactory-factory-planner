@@ -100,16 +100,16 @@ for (const schematic of schematics) {
 
   for (const recipeId of schematic.recipes ?? []) {
     if (!recipeIds.has(recipeId)) {
-      error(
-        `Progression schematic ${schematic.id} references unknown recipe: ${recipeId}`,
+      warn(
+        `Progression schematic ${schematic.id} references a recipe outside the production dataset: ${recipeId}`,
       )
     }
   }
 
   for (const buildingId of schematic.buildings ?? []) {
     if (!buildings[buildingId]) {
-      error(
-        `Progression schematic ${schematic.id} references unknown building: ${buildingId}`,
+      warn(
+        `Progression schematic ${schematic.id} references a building outside the production dataset: ${buildingId}`,
       )
     }
   }
