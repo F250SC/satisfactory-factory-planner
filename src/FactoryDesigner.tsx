@@ -339,6 +339,7 @@ export default function FactoryDesigner({
   const [pan, setPan] = useState({ x: 48, y: 48 })
   const [isPanning, setIsPanning] = useState(false)
   const [panAnchor, setPanAnchor] = useState({ x: 0, y: 0 })
+  const [fitAfterLayout, setFitAfterLayout] = useState(false)
 
   const activeFloor =
     normalized.floors.find((floor) => floor.id === activeFloorId) ??
@@ -1248,6 +1249,7 @@ export default function FactoryDesigner({
     setSelectedLiftId(null)
     setConnectFrom(null)
     setBeltToolActive(false)
+    setFitAfterLayout(true)
   }
 
   const addFloor = () => {
@@ -1565,6 +1567,15 @@ export default function FactoryDesigner({
 
   const zoomLabel = `${Math.round(zoom * 100)}%`
 
+  useEffect(() => {
+    if (!fitAfterLayout) return
+    const frame = requestAnimationFrame(() => {
+      fitView()
+      setFitAfterLayout(false)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [layout, fitAfterLayout])
+
   return (
     <section className="designer-page">
       <div className="floor-tabs">
@@ -1577,6 +1588,8 @@ export default function FactoryDesigner({
                 setActiveFloorId(floor.id)
                 setSelectedId(null)
                 setSelectedUtilityId(null)
+                setSelectedSourceId(null)
+                setSelectedLiftId(null)
                 setConnectFrom(null)
               }}
             >
@@ -1834,10 +1847,17 @@ export default function FactoryDesigner({
           )}
 
           {activeBelts.length > 0 && (
-            <div className="belt-list">
-              <span className="eyebrow">
-                {lang === 'de' ? 'Förderbänder' : 'Conveyor belts'}
-              </span>
+            <details className="belt-list belt-details">
+              <summary>
+                <span className="eyebrow">
+                  {lang === 'de' ? 'Förderbänder' : 'Conveyor belts'}
+                </span>
+                <strong>{activeBelts.length}</strong>
+                <small>
+                  {activeBelts.filter((belt) => flowForEndpoint(belt.from) > beltRates[belt.tier] + 0.001).length}{' '}
+                  {lang === 'de' ? 'überlastet' : 'overloaded'}
+                </small>
+              </summary>
               {activeBelts.map((belt) => {
                 const flow = flowForEndpoint(belt.from)
                 const overloaded = flow > beltRates[belt.tier] + 0.001
@@ -1866,7 +1886,7 @@ export default function FactoryDesigner({
                   </div>
                 )
               })}
-            </div>
+            </details>
           )}
         </aside>
 
