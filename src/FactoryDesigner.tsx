@@ -530,6 +530,11 @@ export default function FactoryDesigner({
   const [fitAfterLayout, setFitAfterLayout] = useState(false)
   const beltOptions = useMemo(() => unlockedBelts(tier), [tier])
 
+  useEffect(() => {
+    if (beltOptions.includes(defaultBeltTier)) return
+    setDefaultBeltTier(beltOptions[beltOptions.length - 1] ?? 'mk1')
+  }, [beltOptions, defaultBeltTier])
+
   const activeFloor =
     normalized.floors.find((floor) => floor.id === activeFloorId) ??
     normalized.floors[0]
@@ -642,6 +647,9 @@ export default function FactoryDesigner({
       ),
     [normalized.belts, activeFloor.id],
   )
+  const unavailableBeltCount = activeBelts.filter(
+    (belt) => !beltOptions.includes(belt.tier),
+  ).length
   const floorLifts = useMemo(
     () =>
       normalized.lifts.filter(
@@ -2710,6 +2718,16 @@ export default function FactoryDesigner({
                 {lang === 'de'
                   ? 'Der Produktionsplan wurde seit der Blueprint-Erzeugung geändert. Der bestehende Blueprint bleibt erhalten, bis du ihn bewusst neu erzeugst.'
                   : 'The production plan changed after this blueprint was generated. The existing blueprint is preserved until you explicitly regenerate it.'}
+              </span>
+            </div>
+          )}
+          {unavailableBeltCount > 0 && (
+            <div className="blueprint-stale-warning">
+              <AlertTriangle size={15} />
+              <span>
+                {lang === 'de'
+                  ? `${unavailableBeltCount} Förderband-Verbindung(en) verwenden eine Stufe, die im aktuell gewählten Tier noch nicht freigeschaltet ist. Sie bleiben zur Sicherheit unverändert gespeichert.`
+                  : `${unavailableBeltCount} conveyor connection(s) use a tier that is not unlocked at the selected progression tier. They are preserved instead of being changed destructively.`}
               </span>
             </div>
           )}
