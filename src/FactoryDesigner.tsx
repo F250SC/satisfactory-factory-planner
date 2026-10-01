@@ -1225,7 +1225,12 @@ export default function FactoryDesigner({
       const splitter = addAutoUtility('splitter')
       if (!splitter) {
         consumers.forEach((consumer) =>
-          addBelt(source, consumer, totalRate / consumers.length),
+          addBelt(
+            source,
+            consumer,
+            totalRate / consumers.length,
+            materialId,
+          ),
         )
         return
       }
