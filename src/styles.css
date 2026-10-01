@@ -1799,3 +1799,34 @@ select:focus, input:focus { border-color: #f28c28; }
     grid-template-columns: 1fr;
   }
 }
+
+
+/* v0.23 audit hardening */
+.audit-warning,
+.blueprint-stale-warning {
+  margin: 14px 0;
+  padding: 11px 13px;
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  border: 1px solid #65431f;
+  border-radius: 10px;
+  background: #21180f;
+  color: #d6ad7c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.audit-warning svg,
+.blueprint-stale-warning svg {
+  color: #f2a34a;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.designer-capability-warning {
+  max-width: 1180px;
+  margin: 0 auto 14px;
+}
+.blueprint-stale-warning {
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
