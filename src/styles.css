@@ -391,3 +391,36 @@ select:focus, input:focus { border-color: #f28c28; }
   width: 30px;
   height: 30px;
 }
+
+
+/* v0.6 result comparison */
+.result-comparison {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.result-comparison > div {
+  padding: 9px 11px;
+  border: 1px solid #2f3946;
+  border-radius: 9px;
+  background: #10161d;
+}
+.result-comparison span,
+.result-comparison strong {
+  display: block;
+}
+.result-comparison span {
+  color: #7f8d9d;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.result-comparison strong {
+  margin-top: 3px;
+  color: #c7d0da;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .result-comparison { grid-template-columns: 1fr; }
+}
