@@ -1,4 +1,5 @@
 import type { RecipeOverrides, ResourceConfig } from './engine'
+import type { DesignerLayout } from './FactoryDesigner'
 
 export interface PlannerSnapshot {
   target: string
@@ -8,6 +9,7 @@ export interface PlannerSnapshot {
   clockControlUnlocked: boolean
   productionShards: number
   resourceConfigs: Record<string, ResourceConfig>
+  designerLayout: DesignerLayout
 }
 
 export interface SavedProfile {
