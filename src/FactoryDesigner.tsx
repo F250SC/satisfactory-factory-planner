@@ -836,6 +836,20 @@ export default function FactoryDesigner({
     setPlacementError(null)
   }
 
+  const removeSource = (id: string) => {
+    const endpoint: DesignerEndpoint = { kind: 'source', id }
+    writeLayout(
+      normalized.nodes,
+      normalized.floors,
+      normalized.lifts,
+      normalized.utilities,
+      removeEndpointBelts(endpoint),
+      normalized.sources.filter((source) => source.id !== id),
+    )
+    if (selectedSourceId === id) setSelectedSourceId(null)
+    setPlacementError(null)
+  }
+
   const moveSource = (id: string, x: number, y: number) => {
     const source = normalized.sources.find((entry) => entry.id === id)
     if (!source) return
@@ -1915,8 +1929,16 @@ export default function FactoryDesigner({
   const selectedUtility = normalized.utilities.find(
     (utility) => utility.id === selectedUtilityId,
   )
+  const selectedSource =
+    normalized.sources.find((source) => source.id === selectedSourceId) ?? null
+  const selectedLift =
+    normalized.lifts.find((lift) => lift.id === selectedLiftId) ?? null
   const selectedFootprint = selected ? footprintFor(selected.machineId) : null
-  const selectedBelt = normalized.belts.find((belt) => belt.id === selectedBeltId) ?? null
+  const selectedBelt =
+    normalized.belts.find((belt) => belt.id === selectedBeltId) ?? null
+  const hasSelection = Boolean(
+    selected || selectedUtility || selectedSource || selectedLift || selectedBelt,
+  )
 
   const endpointLabel = (endpoint: DesignerEndpoint) => {
     if (endpoint.kind === 'source') {
@@ -2313,7 +2335,7 @@ export default function FactoryDesigner({
         </div>
       </div>
 
-      <section className="designer-shell">
+      <section className={`designer-shell ${hasSelection ? 'has-selection' : ''}`}>
         <aside className="designer-sidebar card">
           <div className="designer-sidebar-head">
             <div>
@@ -2432,117 +2454,6 @@ export default function FactoryDesigner({
               )
             })}
           </div>
-
-          {selected && selectedFootprint && (
-            <div className="designer-inspector">
-              <span className="eyebrow">
-                {lang === 'de' ? 'Ausgewählt' : 'Selected'}
-              </span>
-              <h3>{machineLabel(selected.machineId)}</h3>
-              <p>{itemName(selected.itemId, lang)}</p>
-              <div className="footprint-info">
-                <span>{lang === 'de' ? 'Ports' : 'Ports'}</span>
-                <strong>
-                  {portCounts({ kind: 'node', id: selected.id }).input} Input ·{' '}
-                  {portCounts({ kind: 'node', id: selected.id }).output} Output
-                </strong>
-                <small>
-                  {selectedFootprint.widthM} × {selectedFootprint.lengthM} m ·{' '}
-                  {selected.rotation}°
-                </small>
-              </div>
-              <div className="inspector-actions">
-                <button
-                  className="action-button"
-                  onClick={() => {
-                    setBeltToolActive(true)
-                    setConnectFrom({
-                      kind: 'node',
-                      id: selected.id,
-                      side: 'output',
-                      port: 0,
-                    })
-                    setPlacementError(null)
-                  }}
-                >
-                  <Unplug size={15} />
-                  {lang === 'de' ? 'Verbindung starten' : 'Start connection'}
-                </button>
-                <button className="action-button" onClick={() => rotateNode(selected.id)}>
-                  <RotateCw size={15} />
-                  {lang === 'de' ? '90° drehen' : 'Rotate 90°'}
-                </button>
-                <button
-                  className="action-button danger"
-                  onClick={() => removeNode(selected.id)}
-                >
-                  <Trash2 size={15} />
-                  {lang === 'de' ? 'Löschen' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {selectedSourceId && (() => {
-            const source = normalized.sources.find((entry) => entry.id === selectedSourceId)
-            if (!source) return null
-            const meta = resourceMeta[source.resourceId]
-            return (
-              <div className="designer-inspector">
-                <span className="eyebrow">{lang === 'de' ? 'Rohstoffquelle' : 'Resource source'}</span>
-                <h3>{meta?.[lang] ?? itemName(source.resourceId, lang)}</h3>
-                <p>Miner Mk.{source.miner.slice(2)} · {Math.round(source.rate * 100) / 100}/min</p>
-              </div>
-            )
-          })()}
-
-          {selectedUtility && (
-            <div className="designer-inspector">
-              <span className="eyebrow">
-                {lang === 'de' ? 'Ausgewählt' : 'Selected'}
-              </span>
-              <h3>
-                {selectedUtility.kind === 'splitter' ? 'Splitter' : 'Merger'}
-              </h3>
-              <p>
-                {selectedUtility.kind === 'splitter'
-                  ? '1 Input · 3 Outputs'
-                  : '3 Inputs · 1 Output'}
-              </p>
-              <div className="inspector-actions">
-                <button
-                  className="action-button"
-                  onClick={() => {
-                    setBeltToolActive(true)
-                    setConnectFrom({
-                      kind: 'utility',
-                      id: selectedUtility.id,
-                      side: 'output',
-                      port: 0,
-                    })
-                    setPlacementError(null)
-                  }}
-                >
-                  <Unplug size={15} />
-                  {lang === 'de' ? 'Verbindung starten' : 'Start connection'}
-                </button>
-                <button
-                  className="action-button"
-                  onClick={() => rotateUtility(selectedUtility.id)}
-                >
-                  <RotateCw size={15} />
-                  {lang === 'de' ? '90° drehen' : 'Rotate 90°'}
-                </button>
-                <button
-                  className="action-button danger"
-                  onClick={() => removeUtility(selectedUtility.id)}
-                >
-                  <Trash2 size={15} />
-                  {lang === 'de' ? 'Löschen' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          )}
 
           {activeBelts.length > 0 && (
             <details className="belt-list belt-details">
@@ -2671,6 +2582,11 @@ export default function FactoryDesigner({
               if (e.button !== 0) return
               const target = e.target as HTMLElement
               if (target.closest('.factory-node, .factory-source, .factory-utility, .factory-lift, .machine-port, .belt-waypoint, .belt-hit-path')) return
+              setSelectedId(null)
+              setSelectedUtilityId(null)
+              setSelectedSourceId(null)
+              setSelectedLiftId(null)
+              setSelectedBeltId(null)
               setIsPanning(true)
               setPanAnchor({ x: e.clientX - pan.x, y: e.clientY - pan.y })
               e.currentTarget.setPointerCapture(e.pointerId)
@@ -2889,12 +2805,16 @@ export default function FactoryDesigner({
                   setSelectedLiftId(lift.id)
                   setSelectedId(null)
                   setSelectedUtilityId(null)
+                  setSelectedSourceId(null)
+                  setSelectedBeltId(null)
                 }}
                 onClick={(e) => {
                   e.stopPropagation()
                   setSelectedLiftId(lift.id)
                   setSelectedId(null)
                   setSelectedUtilityId(null)
+                  setSelectedSourceId(null)
+                  setSelectedBeltId(null)
                 }}
               >
                 <ArrowDownUp size={16} />
@@ -2932,11 +2852,15 @@ export default function FactoryDesigner({
                     setSelectedSourceId(source.id)
                     setSelectedId(null)
                     setSelectedUtilityId(null)
+                    setSelectedLiftId(null)
+                    setSelectedBeltId(null)
                   }}
                   onClick={() => {
                     setSelectedSourceId(source.id)
                     setSelectedId(null)
                     setSelectedUtilityId(null)
+                    setSelectedLiftId(null)
+                    setSelectedBeltId(null)
                   }}
                 >
                   <img
@@ -2979,6 +2903,9 @@ export default function FactoryDesigner({
                   onClick={() => {
                     setSelectedUtilityId(utility.id)
                     setSelectedId(null)
+                    setSelectedSourceId(null)
+                    setSelectedLiftId(null)
+                    setSelectedBeltId(null)
                   }}
                 >
                   {utility.kind === 'splitter' ? (
@@ -3016,10 +2943,17 @@ export default function FactoryDesigner({
                       }),
                     )
                     setSelectedId(node.id)
+                    setSelectedUtilityId(null)
+                    setSelectedSourceId(null)
+                    setSelectedLiftId(null)
+                    setSelectedBeltId(null)
                   }}
                   onClick={() => {
                     setSelectedId(node.id)
                     setSelectedUtilityId(null)
+                    setSelectedSourceId(null)
+                    setSelectedLiftId(null)
+                    setSelectedBeltId(null)
                   }}
                   className={`factory-node ${selectedId === node.id ? 'selected' : ''}`}
                   style={{
