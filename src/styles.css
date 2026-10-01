@@ -1191,3 +1191,33 @@ select:focus, input:focus { border-color: #f28c28; }
   color: #ffc078;
   box-shadow: 0 0 0 2px rgba(242,140,40,.12);
 }
+
+
+/* v0.14.3 visible machine conveyor ports */
+.factory-node,
+.factory-utility {
+  overflow: visible !important;
+}
+.machine-port {
+  width: 14px;
+  height: 14px;
+  z-index: 20;
+  box-shadow: 0 0 0 3px #10161d, 0 0 8px rgba(0,0,0,.55);
+}
+.input-port {
+  background: #48c979;
+  border: 2px solid #b4f3c8;
+}
+.output-port {
+  background: #f28c28;
+  border: 2px solid #ffd09a;
+}
+.machine-port:hover,
+.machine-port:focus {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 3px #10161d, 0 0 12px rgba(242,140,40,.55);
+}
+.action-button.tool-active ~ * .machine-port,
+.factory-grid:has(.factory-node) .machine-port {
+  opacity: 1;
+}
