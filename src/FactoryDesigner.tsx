@@ -566,13 +566,26 @@ export default function FactoryDesigner({
       return source
     })
 
-    if (changed) {
+    const sourceResourceById = new Map(
+      nextSources.map((source) => [source.id, source.resourceId]),
+    )
+    let beltsChanged = false
+    const nextBelts = normalized.belts.map((belt) => {
+      if (belt.from.kind !== 'source') return belt
+      const resourceId = sourceResourceById.get(belt.from.id)
+      const resource = resources.find((entry) => entry.id === resourceId)
+      if (!resource || belt.tier === resource.config.belt) return belt
+      beltsChanged = true
+      return { ...belt, tier: resource.config.belt }
+    })
+
+    if (changed || beltsChanged) {
       onChange({
         nodes: normalized.nodes,
         floors: normalized.floors,
         lifts: normalized.lifts,
         utilities: normalized.utilities,
-        belts: normalized.belts,
+        belts: nextBelts,
         sources: nextSources,
       })
     }
@@ -642,6 +655,56 @@ export default function FactoryDesigner({
       ) ?? null
     )
   }
+
+  const machineIndexForNode = (nodeId: string) => {
+    const node = normalized.nodes.find((entry) => entry.id === nodeId)
+    if (!node) return 0
+    const peers = normalized.nodes.filter(
+      (entry) =>
+        entry.itemId === node.itemId &&
+        entry.machineId === node.machineId,
+    )
+    return Math.max(0, peers.findIndex((entry) => entry.id === nodeId))
+  }
+
+  const machineClockForNode = (nodeId: string) => {
+    const step = stepForNode(nodeId)
+    if (!step) return 100
+    const index = machineIndexForNode(nodeId)
+    return step.clocks[index] ?? 100
+  }
+
+  const machineInputRates = (nodeId: string) => {
+    const step = stepForNode(nodeId)
+    if (!step || step.recipe.time <= 0) return []
+    const clock = machineClockForNode(nodeId) / 100
+    return step.recipe.ingredients.map((ingredient, index) => ({
+      item: ingredient.item,
+      port: index,
+      rate: ingredient.amount * (60 / step.recipe.time) * clock,
+    }))
+  }
+
+  const machineOutputRates = (nodeId: string) => {
+    const step = stepForNode(nodeId)
+    if (!step || step.recipe.time <= 0) return []
+    const clock = machineClockForNode(nodeId) / 100
+    return step.recipe.products.map((product, index) => ({
+      item: product.item,
+      port: index,
+      rate: product.amount * (60 / step.recipe.time) * clock,
+    }))
+  }
+
+  const outgoingBeltsFor = (kind: DesignerEndpoint['kind'], id: string) =>
+    normalized.belts.filter(
+      (belt) => belt.from.kind === kind && belt.from.id === id,
+    )
+
+  const incomingBeltsFor = (kind: DesignerEndpoint['kind'], id: string) =>
+    normalized.belts.filter(
+      (belt) => belt.to.kind === kind && belt.to.id === id,
+    )
 
   const portCounts = (endpoint: DesignerEndpoint) => {
     if (endpoint.kind === 'source') return { input: 0, output: 1 }
@@ -915,12 +978,25 @@ export default function FactoryDesigner({
       clockControlUnlocked,
     ).available
 
+    const matchingSourceIds = new Set(
+      normalized.sources
+        .filter((source) => source.resourceId === resourceId)
+        .map((source) => source.id),
+    )
+    const nextBelts = normalized.belts.map((belt) =>
+      nextConfig.belt &&
+      belt.from.kind === 'source' &&
+      matchingSourceIds.has(belt.from.id)
+        ? { ...belt, tier: nextConfig.belt }
+        : belt,
+    )
+
     writeLayout(
       normalized.nodes,
       normalized.floors,
       normalized.lifts,
       normalized.utilities,
-      normalized.belts,
+      nextBelts,
       normalized.sources.map((source) =>
         source.resourceId === resourceId
           ? {
@@ -1226,15 +1302,33 @@ export default function FactoryDesigner({
   }
 
   const updateBelt = (id: string, patch: Partial<DesignerBelt>) => {
+    const currentBelt = normalized.belts.find((belt) => belt.id === id)
+    const nextBelts = normalized.belts.map((belt) =>
+      belt.id === id ? { ...belt, ...patch } : belt,
+    )
+
     writeLayout(
       normalized.nodes,
       normalized.floors,
       normalized.lifts,
       normalized.utilities,
-      normalized.belts.map((belt) =>
-        belt.id === id ? { ...belt, ...patch } : belt,
-      ),
+      nextBelts,
     )
+
+    if (patch.tier && currentBelt?.from.kind === 'source') {
+      const source = normalized.sources.find(
+        (entry) => entry.id === currentBelt.from.id,
+      )
+      const resource = source
+        ? resources.find((entry) => entry.id === source.resourceId)
+        : null
+      if (source && resource && resource.config.belt !== patch.tier) {
+        onResourceChange(source.resourceId, {
+          ...resource.config,
+          belt: patch.tier,
+        })
+      }
+    }
   }
 
   const removeBelt = (id: string) => {
