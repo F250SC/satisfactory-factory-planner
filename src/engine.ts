@@ -22,6 +22,8 @@ export interface ResourceConfig {
   belt: BeltTier
   pipe: PipeTier
   count: number
+  clockSpeed: number
+  shards: number
   manualRate?: number
 }
 
@@ -63,7 +65,11 @@ function ingredientRate(recipe: GameRecipe, amount: number) {
   return amount * (60 / recipe.time)
 }
 
-export function resourceOutput(resourceId: string, config: ResourceConfig): ResourceRate {
+export function resourceOutput(
+  resourceId: string,
+  config: ResourceConfig,
+  clockControlUnlocked = true,
+): ResourceRate {
   const meta = resourceMeta[resourceId]
   const count = Math.max(1, config.count || 1)
 
@@ -72,8 +78,14 @@ export function resourceOutput(resourceId: string, config: ResourceConfig): Reso
     return { extracted: manual, available: manual, transportLimited: false, unit: 'items' }
   }
 
+  const maxClock = clockControlUnlocked ? 100 + Math.max(0, Math.min(3, config.shards)) * 50 : 100
+  const effectiveClock = clockControlUnlocked
+    ? Math.max(1, Math.min(maxClock, config.clockSpeed || 100))
+    : 100
+  const clockFactor = effectiveClock / 100
+
   if (meta.kind === 'solid') {
-    const perNode = baseMinerRates[config.miner] * purityMultiplier[config.purity]
+    const perNode = baseMinerRates[config.miner] * purityMultiplier[config.purity] * clockFactor
     const perNodeAvailable = Math.min(perNode, beltRates[config.belt])
     return {
       extracted: perNode * count,
@@ -84,7 +96,7 @@ export function resourceOutput(resourceId: string, config: ResourceConfig): Reso
   }
 
   if (meta.kind === 'oil') {
-    const perExtractor = 120 * purityMultiplier[config.purity]
+    const perExtractor = 120 * clockFactor * purityMultiplier[config.purity] * clockFactor
     const perExtractorAvailable = Math.min(perExtractor, pipeRates[config.pipe])
     return {
       extracted: perExtractor * count,
@@ -105,7 +117,7 @@ export function resourceOutput(resourceId: string, config: ResourceConfig): Reso
     }
   }
 
-  const perExtractor = 60 * purityMultiplier[config.purity]
+  const perExtractor = 60 * purityMultiplier[config.purity] * clockFactor
   const perExtractorAvailable = Math.min(perExtractor, pipeRates[config.pipe])
   return {
     extracted: perExtractor * count,
@@ -194,7 +206,17 @@ function collectMachineRates(
   }
 }
 
-function clockPlan(exactMachinesAt100: number, maxClock: number) {
+function clockPlan(
+  exactMachinesAt100: number,
+  clockControlUnlocked: boolean,
+  productionShards: number,
+) {
+  if (!clockControlUnlocked) {
+    const machines = Math.max(1, Math.ceil(exactMachinesAt100))
+    return { machines, clocks: Array.from({ length: machines }, () => 100) }
+  }
+
+  const maxClock = 100 + Math.max(0, Math.min(3, productionShards)) * 50
   const capacityPerMachine = maxClock / 100
   const machines = Math.max(1, Math.ceil(exactMachinesAt100 / capacityPerMachine))
   let remainingPercent = exactMachinesAt100 * 100
@@ -202,7 +224,7 @@ function clockPlan(exactMachinesAt100: number, maxClock: number) {
 
   for (let i = 0; i < machines; i += 1) {
     const clock = Math.min(maxClock, remainingPercent)
-    clocks.push(Math.max(1, clock))
+    clocks.push(Math.max(1, Math.round(clock * 10000) / 10000))
     remainingPercent -= clock
   }
 
@@ -230,7 +252,8 @@ function machinePower(recipe: GameRecipe, clocks: number[]) {
 export function calculateProduction(
   targetItem: string,
   availability: Record<string, number>,
-  maxClock: number,
+  clockControlUnlocked: boolean,
+  productionShards: number,
   overrides: RecipeOverrides,
 ) {
   const rawPerUnit = rawRequirementPerUnit(targetItem, overrides)
@@ -260,7 +283,11 @@ export function calculateProduction(
   const machineSteps: MachineStep[] = Array.from(collected.values()).map(({ item, recipe, rate }) => {
     const perMachine = outputRate(recipe, item)
     const exactMachinesAt100 = perMachine > 0 ? rate / perMachine : 0
-    const { machines, clocks } = clockPlan(exactMachinesAt100, maxClock)
+    const { machines, clocks } = clockPlan(
+      exactMachinesAt100,
+      clockControlUnlocked,
+      productionShards,
+    )
 
     return {
       item,
