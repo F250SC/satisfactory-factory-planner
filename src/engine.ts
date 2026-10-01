@@ -70,11 +70,10 @@ export function rawRequirementPerUnit(item: ItemId): Partial<Record<ItemId, numb
   return requirements
 }
 
-function machinePlanFor(
+function collectMachineRates(
   item: ItemId,
   requiredRate: number,
-  allowOverclock: boolean,
-  accumulator: MachineStep[],
+  accumulator: Partial<Record<ItemId, number>>,
 ) {
   if (rawResources.includes(item)) return
 
@@ -83,24 +82,11 @@ function machinePlanFor(
     throw new Error(`No recipe configured for ${item}`)
   }
 
-  const exactMachines = requiredRate / recipe.outputRate
-  const machines = allowOverclock
-    ? Math.max(1, Math.ceil(exactMachines / 2.5))
-    : Math.max(1, Math.ceil(exactMachines))
-  const clock = (exactMachines / machines) * 100
-
-  accumulator.push({
-    item,
-    recipe,
-    requiredRate,
-    exactMachines,
-    machines,
-    clock,
-  })
+  accumulator[item] = (accumulator[item] ?? 0) + requiredRate
 
   for (const input of recipe.inputs) {
     const inputRate = requiredRate * (input.rate / recipe.outputRate)
-    machinePlanFor(input.item, inputRate, allowOverclock, accumulator)
+    collectMachineRates(input.item, inputRate, accumulator)
   }
 }
 
@@ -128,8 +114,27 @@ export function calculateProduction(
     leftovers[resource] = Math.max(0, available - used)
   }
 
-  const machineSteps: MachineStep[] = []
-  machinePlanFor(target, output, allowOverclock, machineSteps)
+  const machineRates: Partial<Record<ItemId, number>> = {}
+  collectMachineRates(target, output, machineRates)
+
+  const machineSteps: MachineStep[] = Object.entries(machineRates).map(([itemKey, requiredRate]) => {
+    const item = itemKey as ItemId
+    const recipe = recipeFor(item)!
+    const exactMachines = requiredRate / recipe.outputRate
+    const machines = allowOverclock
+      ? Math.max(1, Math.ceil(exactMachines / 2.5))
+      : Math.max(1, Math.ceil(exactMachines))
+    const clock = (exactMachines / machines) * 100
+
+    return {
+      item,
+      recipe,
+      requiredRate,
+      exactMachines,
+      machines,
+      clock,
+    }
+  })
 
   return {
     output,
