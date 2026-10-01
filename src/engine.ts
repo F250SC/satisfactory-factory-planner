@@ -73,47 +73,44 @@ export function resourceOutput(resourceId: string, config: ResourceConfig): Reso
   }
 
   if (meta.kind === 'solid') {
-    const extracted =
-      baseMinerRates[config.miner] *
-      purityMultiplier[config.purity] *
-      count
-    const capacity = beltRates[config.belt]
+    const perNode = baseMinerRates[config.miner] * purityMultiplier[config.purity]
+    const perNodeAvailable = Math.min(perNode, beltRates[config.belt])
     return {
-      extracted,
-      available: Math.min(extracted, capacity),
-      transportLimited: extracted > capacity + 0.0001,
+      extracted: perNode * count,
+      available: perNodeAvailable * count,
+      transportLimited: perNode > beltRates[config.belt] + 0.0001,
       unit: 'items',
     }
   }
 
   if (meta.kind === 'oil') {
-    const extracted = 120 * purityMultiplier[config.purity] * count
-    const capacity = pipeRates[config.pipe]
+    const perExtractor = 120 * purityMultiplier[config.purity]
+    const perExtractorAvailable = Math.min(perExtractor, pipeRates[config.pipe])
     return {
-      extracted,
-      available: Math.min(extracted, capacity),
-      transportLimited: extracted > capacity + 0.0001,
+      extracted: perExtractor * count,
+      available: perExtractorAvailable * count,
+      transportLimited: perExtractor > pipeRates[config.pipe] + 0.0001,
       unit: 'm³',
     }
   }
 
   if (meta.kind === 'water') {
-    const extracted = 120 * count
-    const capacity = pipeRates[config.pipe]
+    const perExtractor = 120
+    const perExtractorAvailable = Math.min(perExtractor, pipeRates[config.pipe])
     return {
-      extracted,
-      available: Math.min(extracted, capacity),
-      transportLimited: extracted > capacity + 0.0001,
+      extracted: perExtractor * count,
+      available: perExtractorAvailable * count,
+      transportLimited: perExtractor > pipeRates[config.pipe] + 0.0001,
       unit: 'm³',
     }
   }
 
-  const extracted = 60 * purityMultiplier[config.purity] * count
-  const capacity = pipeRates[config.pipe]
+  const perExtractor = 60 * purityMultiplier[config.purity]
+  const perExtractorAvailable = Math.min(perExtractor, pipeRates[config.pipe])
   return {
-    extracted,
-    available: Math.min(extracted, capacity),
-    transportLimited: extracted > capacity + 0.0001,
+    extracted: perExtractor * count,
+    available: perExtractorAvailable * count,
+    transportLimited: perExtractor > pipeRates[config.pipe] + 0.0001,
     unit: 'm³',
   }
 }
